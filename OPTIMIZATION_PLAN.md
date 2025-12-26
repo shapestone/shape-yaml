@@ -2,6 +2,31 @@
 
 **Goal**: Beat yaml.v3 unmarshal performance (currently 1.14x slower)
 
+## Key Finding: Missing Fast Path Implementation
+
+The shape-core documentation describes a **dual-path architecture** where:
+- `Parse()` → AST path (full tree construction)
+- `Unmarshal()` → Fast path (direct parsing without AST)
+
+**shape-json implements this correctly** with `internal/fastparser/`:
+```go
+// pkg/json/unmarshal.go
+func Unmarshal(data []byte, v interface{}) error {
+    return fastparser.Unmarshal(data, v)  // Fast path!
+}
+```
+
+**shape-yaml is MISSING this** - it calls `Parse()` first:
+```go
+// pkg/yaml/unmarshal.go (CURRENT - SLOW)
+func Unmarshal(data []byte, v interface{}) error {
+    node, err := Parse(string(data))  // AST construction!
+    return unmarshalFromNode(node, v)
+}
+```
+
+**Solution**: Create `internal/fastparser/` for YAML following shape-json's pattern.
+
 ## Current State Analysis
 
 ### Benchmark Comparison
