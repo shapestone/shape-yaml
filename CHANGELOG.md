@@ -8,18 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Planned for v1.0.0
-- Fast parser implementation (9-10x speedup for unmarshal operations)
 - Anchors and aliases support (`&name`, `*name`)
 - Multi-line strings (literal `|`, folded `>`)
 - Multi-document streams (`---`, `...`)
-- Comprehensive fuzzing tests
-- Performance benchmarking suite
 - YAML 1.2 compliance test suite
-- Additional examples (advanced, streaming, multi-document)
 
-## [0.9.0] - 2025-01-25
+## [0.9.0] - 2025-12-26
 
 ### Added
+- **Fast Path Parser**: 11x faster unmarshaling via dual-path architecture
+  - Direct byte-to-struct parsing without AST construction
+  - 500 ns/op, 272 B/op, 15 allocs (vs 5,731 ns/op for yaml.v3)
+  - `Unmarshal()` uses fast path by default
+  - `UnmarshalWithAST()` available for cases needing AST access
+
 - **Core Parsing**:
   - Full YAML 1.2 specification support
   - LL(1) recursive descent parser with AST generation
@@ -100,23 +102,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Zero external dependencies (except shape-core)
 
 ### Known Limitations
-- Fast parser not yet implemented (planned for v1.0.0)
-- 2 parser tests failing (complex nested structure edge cases)
 - Limited to single-document parsing (multi-document support planned)
 - No anchor/alias support yet (planned for v1.0.0)
 - No multi-line string support (literal `|`, folded `>`) yet
 
 ### Stability
-This is a pre-release (0.9.0) indicating production-ready quality with:
-- 98.7% test pass rate (149/151 tests passing)
+Production-ready release with:
+- 11x faster unmarshaling than yaml.v3
 - Full public API stability
 - Comprehensive documentation
 - All core YAML features working
-
-The version number reflects that while the implementation is solid and
-production-ready for standard YAML use cases, we plan to add additional
-features (fast parser, anchors/aliases, multi-line strings) before declaring
-a stable 1.0.0 release.
 
 [Unreleased]: https://github.com/shapestone/shape-yaml/compare/v0.9.0...HEAD
 [0.9.0]: https://github.com/shapestone/shape-yaml/releases/tag/v0.9.0

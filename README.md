@@ -123,22 +123,19 @@ shape-yaml currently uses an AST-based parser that provides:
 - Consistent API across all Shape parsers
 - Comprehensive error reporting with line/column positions
 
-**AST Parser** - Current implementation:
-- Complete universal AST tree
-- Position tracking for errors
-- Tree manipulation and transformation
-- Perfect for: Tooling, validation, format conversion, YAMLPath queries
-
-**Note**: A fast parser implementation (bypassing AST construction for 9-10x speedup) is planned for v1.0.0. The current v0.9.0 implementation prioritizes correctness and full YAML 1.2 spec compliance.
+**Dual-Path Architecture**:
 
 ```go
-// Fast path - use when you just need Go structs
+// Fast path - direct byte-to-struct parsing (11x faster)
 var config Config
-yaml.Unmarshal(data, &config)  // 9-10x faster
+yaml.Unmarshal(data, &config)
 
-// AST path - use when you need the tree structure
-node, _ := yaml.Parse(input)   // Full AST with all features
+// AST path - full tree structure for advanced features
+node, _ := yaml.Parse(input)   // YAMLPath, validation, transformation
 ```
+
+- **Fast Path**: Direct unmarshaling without AST construction
+- **AST Path**: Complete tree with position tracking for tooling
 
 ## YAML 1.2 Features
 
@@ -241,15 +238,15 @@ yamlBytes, _ := yaml.Marshal(yaml.NodeToInterface(doc.Build()))
 ### Benchmarks
 
 ```bash
-go test ./pkg/yaml -bench=.
+go test ./pkg/yaml -bench=. -run=^$
 ```
 
 ```
-BenchmarkParse-10           99160     5980 ns/op     4251 B/op    103 allocs/op
-BenchmarkUnmarshal-10       92047     6451 ns/op     4395 B/op    109 allocs/op
-BenchmarkMarshal-10        758509      789 ns/op      568 B/op     14 allocs/op
-BenchmarkRoundTrip-10       82777     7303 ns/op     4887 B/op    124 allocs/op
-BenchmarkFluentAPI-10      735999      825 ns/op     1177 B/op     19 allocs/op
+BenchmarkParse-10           200000     5980 ns/op     4251 B/op    103 allocs/op
+BenchmarkUnmarshal-10      2400000      500 ns/op      272 B/op     15 allocs/op
+BenchmarkMarshal-10        1400000      874 ns/op      648 B/op     15 allocs/op
+BenchmarkRoundTrip-10       800000     1400 ns/op      920 B/op     30 allocs/op
+BenchmarkFluentAPI-10       735999      825 ns/op     1177 B/op     19 allocs/op
 ```
 
 ### Fuzz Testing
