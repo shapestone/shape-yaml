@@ -14,9 +14,8 @@ Performance comparison between shape-yaml v0.9.0 and the industry-standard gopkg
 
 | Operation | shape-yaml | yaml.v3 | Comparison |
 |-----------|------------|---------|------------|
-| **Unmarshal** | 6,145 ns/op | 5,300 ns/op | ~1.16x slower |
-| **Marshal** | 924 ns/op | 3,165 ns/op | **~3.4x FASTER** ✨ |
-| **Round-trip** | ~7,000 ns/op | 9,045 ns/op | **~1.3x FASTER** ✨ |
+| **Unmarshal** | 6,200 ns/op | 5,458 ns/op | ~1.14x slower |
+| **Marshal** | 869 ns/op | 3,251 ns/op | **~3.7x FASTER** ✨ |
 
 ### Memory Allocation
 
@@ -24,18 +23,17 @@ Performance comparison between shape-yaml v0.9.0 and the industry-standard gopkg
 |-----------|------------|---------|------------|
 | **Unmarshal** | 4,435 B/op, 109 allocs | 8,400 B/op, 69 allocs | **47% less memory** ✨ |
 | **Marshal** | 648 B/op, 15 allocs | 7,035 B/op, 37 allocs | **91% less memory** ✨ |
-| **Round-trip** | ~5,083 B/op, ~124 allocs | 15,583 B/op, 114 allocs | **67% less memory** ✨ |
 
 ## Detailed Benchmark Results
 
 ```
-BenchmarkShapeYAML_Unmarshal-10    	  175393	      6145 ns/op	    4435 B/op	     109 allocs/op
-BenchmarkStdYAML_Unmarshal-10      	  232958	      5300 ns/op	    8400 B/op	      69 allocs/op
+BenchmarkShapeYAML_Unmarshal-10    	  183172	      6200 ns/op	    4435 B/op	     109 allocs/op
+BenchmarkStdYAML_Unmarshal-10      	  227890	      5458 ns/op	    8400 B/op	      69 allocs/op
 
-BenchmarkShapeYAML_Marshal-10      	 1267383	       924 ns/op	     648 B/op	      15 allocs/op
-BenchmarkStdYAML_Marshal-10        	  397354	      3165 ns/op	    7035 B/op	      37 allocs/op
+BenchmarkShapeYAML_Marshal-10      	 1374118	       869 ns/op	     648 B/op	      15 allocs/op
+BenchmarkStdYAML_Marshal-10        	  366470	      3251 ns/op	    7035 B/op	      37 allocs/op
 
-BenchmarkStdYAML_RoundTrip-10      	  134449	      9045 ns/op	   15583 B/op	     114 allocs/op
+BenchmarkStdYAML_RoundTrip-10      	  128808	      9353 ns/op	   15583 B/op	     114 allocs/op
 ```
 
 ## Analysis
@@ -43,7 +41,7 @@ BenchmarkStdYAML_RoundTrip-10      	  134449	      9045 ns/op	   15583 B/op	    
 ### Strengths of shape-yaml
 
 1. **Marshaling Performance** ⚡
-   - **3.4x faster** than yaml.v3
+   - **3.7x faster** than yaml.v3
    - **91% less memory allocation**
    - Excellent for generating YAML output
 
@@ -52,31 +50,25 @@ BenchmarkStdYAML_RoundTrip-10      	  134449	      9045 ns/op	   15583 B/op	    
    - Better for high-throughput scenarios
    - Reduced GC pressure
 
-3. **Round-trip Performance** 🔄
-   - **1.3x faster** overall
-   - **67% less memory** for complete marshal→unmarshal cycle
-   - Great for configuration rewriting workflows
-
 ### Trade-offs
 
 1. **Unmarshal Speed**
-   - ~1.16x slower than yaml.v3
-   - Still very fast (6.1μs vs 5.3μs)
+   - ~1.14x slower than yaml.v3
+   - Still very fast (6.2μs vs 5.5μs)
    - Negligible for most use cases
 
 2. **Allocation Count**
    - More allocations during unmarshal (109 vs 69)
-   - Offset by much lower total memory usage
+   - Offset by much lower total memory usage (47% less)
    - Due to AST construction (provides additional features)
 
 ## When to Choose shape-yaml
 
 ✅ **Best for:**
-- **YAML generation/marshaling** - 3.4x faster
+- **YAML generation/marshaling** - 3.7x faster
 - **High-throughput scenarios** - Lower memory usage
 - **Format conversion** - Universal AST works across JSON/YAML/XML
 - **Memory-constrained environments** - 47-91% less allocation
-- **Configuration rewriting** - Excellent round-trip performance
 
 ⚠️ **Consider alternatives for:**
 - Pure unmarshaling workloads where microseconds matter
@@ -133,9 +125,8 @@ go test ./pkg/yaml -bench=BenchmarkShapeYAML_Marshal -benchmem
 
 **shape-yaml v0.9.0 delivers competitive performance** with significant advantages:
 
-- **Superior marshaling** (3.4x faster, 91% less memory)
-- **Better round-trip** (1.3x faster, 67% less memory)
-- **Comparable unmarshaling** (~16% slower but uses 47% less memory)
+- **Superior marshaling** (3.7x faster, 91% less memory)
+- **Comparable unmarshaling** (~14% slower but uses 47% less memory)
 
 The performance characteristics make shape-yaml an **excellent choice for most YAML workloads**, especially those involving YAML generation, format conversion, or high-throughput scenarios.
 
