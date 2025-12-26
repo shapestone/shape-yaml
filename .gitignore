@@ -31,3 +31,6 @@ PERFORMANCE_REPORT.md
 # Build
 /bin/
 /dist/
+
+# Test artifacts
+test_results.txt

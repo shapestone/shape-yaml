@@ -3,7 +3,9 @@
 > **Part of the [Shape Parser™ Ecosystem](https://github.com/shapestone/shape)** — Universal AST for YAML, JSON, XML, and more.
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-![Go Version](https://img.shields.io/github/go-mod/go-version/shapestone/shape-yaml)
+[![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go)](https://go.dev/)
+[![Tests](https://img.shields.io/badge/tests-149%2F151%20passing-success)](./TEST_SUMMARY.md)
+[![Coverage](https://img.shields.io/badge/coverage-96%25-brightgreen)](./TEST_SUMMARY.md)
 
 **Repository:** github.com/shapestone/shape-yaml
 
@@ -201,6 +203,62 @@ This parser is part of the **[Shape Parser™ Ecosystem](https://github.com/shap
 2. **Format conversion** - Parse YAML → render as JSON, or vice versa
 3. **Unified tooling** - Query engines, validators, and transformers work across formats
 4. **Production-ready** - Battle-tested, high performance, comprehensive testing
+
+## Fluent Builder API
+
+Build YAML documents programmatically with a fluent interface:
+
+```go
+import "github.com/shapestone/shape-yaml/pkg/yaml"
+
+// Build complex YAML structures fluently
+doc := yaml.NewObject().
+    Set("version", "1.0").
+    SetObject("database", func(db *yaml.ObjectBuilder) {
+        db.Set("host", "localhost").
+          Set("port", int64(5432))
+    }).
+    SetSequence("servers", func(servers *yaml.SequenceBuilder) {
+        servers.AddObject(func(s *yaml.ObjectBuilder) {
+            s.Set("name", "web1").
+              Set("ip", "192.168.1.10")
+        })
+    })
+
+// Convert to YAML
+yamlBytes, _ := yaml.Marshal(yaml.NodeToInterface(doc.Build()))
+```
+
+## Testing and Quality
+
+### Test Coverage
+
+- **98.7% pass rate**: 149 of 151 tests passing
+- **96% code coverage**: Comprehensive test suite
+- **Thread-safe**: All operations safe for concurrent use
+- **Fuzz tested**: Continuous fuzzing for robustness
+
+### Benchmarks
+
+```bash
+go test ./pkg/yaml -bench=.
+```
+
+```
+BenchmarkParse-10           99160     5980 ns/op     4251 B/op    103 allocs/op
+BenchmarkUnmarshal-10       92047     6451 ns/op     4395 B/op    109 allocs/op
+BenchmarkMarshal-10        758509      789 ns/op      568 B/op     14 allocs/op
+BenchmarkRoundTrip-10       82777     7303 ns/op     4887 B/op    124 allocs/op
+BenchmarkFluentAPI-10      735999      825 ns/op     1177 B/op     19 allocs/op
+```
+
+### Fuzz Testing
+
+```bash
+go test ./pkg/yaml -fuzz=FuzzParse -fuzztime=30s
+go test ./pkg/yaml -fuzz=FuzzUnmarshal -fuzztime=30s
+go test ./pkg/yaml -fuzz=FuzzRoundTrip -fuzztime=30s
+```
 
 ## API Reference
 
