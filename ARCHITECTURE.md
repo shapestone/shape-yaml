@@ -434,13 +434,13 @@ func getFieldInfo(field reflect.StructField) fieldInfo {
 
 **Alternative**: Parser could track indentation directly, but this mixes lexical and syntactic concerns.
 
-### 4. Why No Fast Parser in v0.1.0?
+### 4. Why No Fast Parser in v0.9.0?
 
-**Decision**: Defer fast parser implementation to v0.2.0.
+**Decision**: Defer fast parser implementation to v1.0.0.
 
 **Rationale**:
 - YAML indentation-based structure is more complex than JSON's delimiter-based structure
-- Correctness and full spec compliance take priority for v0.1.0
+- Correctness and full spec compliance take priority for v0.9.0
 - Fast parser would require significant additional complexity:
   - Manual indentation tracking during byte scanning
   - Implicit type detection without tokenization
@@ -450,7 +450,7 @@ func getFieldInfo(field reflect.StructField) fieldInfo {
   - Buffer pooling for marshaling
   - Minimal allocations where possible
 
-**Future Work**: v0.2.0 will add a fast parser similar to shape-json's approach (4-5x speedup).
+**Future Work**: v1.0.0 will add a fast parser similar to shape-json's approach (4-5x speedup).
 
 ### 5. Why Support Both Block and Flow Styles?
 
@@ -483,7 +483,7 @@ func getFieldInfo(field reflect.StructField) fieldInfo {
    - ParseReader uses streaming (~20KB working memory regardless of file size)
    - Node pooling via `ReleaseTree()` for tree reuse
 
-### Future Optimizations (v0.2.0)
+### Future Optimizations (v1.0.0)
 
 1. **Fast Parser**:
    - Direct byte → Go type conversion (no AST allocation)
@@ -530,11 +530,11 @@ pkg/yaml/api_test.go                  # Public API tests
 examples/basic/                       # Integration examples
 ```
 
-### Known Limitations (v0.1.0)
+### Known Limitations (v0.9.0)
 
 - 2 failing parser tests (complex nested structures edge cases)
-- No fuzzing tests yet (planned for v0.2.0)
-- No benchmarking suite yet (planned for v0.2.0)
+- No fuzzing tests yet (planned for v1.0.0)
+- No benchmarking suite yet (planned for v1.0.0)
 
 ## Contributing
 

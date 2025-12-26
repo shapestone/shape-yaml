@@ -127,7 +127,7 @@ shape-yaml currently uses an AST-based parser that provides:
 - Tree manipulation and transformation
 - Perfect for: Tooling, validation, format conversion, YAMLPath queries
 
-**Note**: A fast parser implementation (bypassing AST construction for 9-10x speedup) is planned for v0.2.0. The current implementation prioritizes correctness and full YAML 1.2 spec compliance.
+**Note**: A fast parser implementation (bypassing AST construction for 9-10x speedup) is planned for v1.0.0. The current v0.9.0 implementation prioritizes correctness and full YAML 1.2 spec compliance.
 
 ```go
 // Fast path - use when you just need Go structs

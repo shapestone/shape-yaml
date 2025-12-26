@@ -1,8 +1,8 @@
-# Test Summary - shape-yaml v0.1.0
+# Test Summary - shape-yaml v0.9.0
 
 ## Overview
 
-This document summarizes the test coverage and results for shape-yaml v0.1.0.
+This document summarizes the test coverage and results for shape-yaml v0.9.0.
 
 ## Test Results by Package
 
@@ -50,12 +50,12 @@ This document summarizes the test coverage and results for shape-yaml v0.1.0.
 1. **TestParseAnchorsAndAliases/anchor_with_nested_structure**
    - Feature: YAML anchors (`&name`) and aliases (`*name`)
    - Status: Not yet implemented
-   - Planned for: v0.2.0
+   - Planned for: v1.0.0
 
 2. **TestParseComplexStructures/sequence_of_mappings**
    - Edge case with complex nested sequence structure
    - Minor parsing issue with specific indentation pattern
-   - Planned fix: v0.1.1
+   - Planned fix: v0.9.1
 
 ### ✅ `pkg/yaml` (Public API) - PASSING (100%)
 
@@ -134,23 +134,23 @@ This document summarizes the test coverage and results for shape-yaml v0.1.0.
 
 1. **Anchors and Aliases** (`&name`, `*name`)
    - Not implemented yet
-   - Planned for v0.2.0
+   - Planned for v1.0.0
 
 2. **Multi-line Strings** (literal `|`, folded `>`)
    - Not implemented yet
-   - Planned for v0.2.0
+   - Planned for v1.0.0
 
 3. **Multi-Document Streams** (`---`, `...`)
    - Partial support
-   - Full implementation planned for v0.2.0
+   - Full implementation planned for v1.0.0
 
 4. **Complex Keys** (`?` marker)
    - Not implemented yet
-   - Planned for v0.2.0
+   - Planned for v1.0.0
 
 5. **Merge Keys** (`<<`)
    - Not implemented yet
-   - Planned for v0.2.0
+   - Planned for v1.0.0
 
 ## Quality Metrics
 
@@ -194,14 +194,14 @@ This document summarizes the test coverage and results for shape-yaml v0.1.0.
 - **Memory**: Constant usage for streaming (ParseReader)
 - **Allocations**: Optimized with buffer pooling
 
-### Planned Improvements (v0.2.0):
+### Planned Improvements (v1.0.0):
 - **Fast Parser**: 9-10x speedup for unmarshal operations
 - **SWAR Optimizations**: Enhanced string scanning
 - **Zero-Copy**: Reduced allocations for short strings
 
 ## Benchmarks
 
-*Note: Formal benchmarking suite planned for v0.2.0*
+*Note: Formal benchmarking suite planned for v1.0.0*
 
 Current informal observations:
 - Small documents (<10KB): ~0.5ms parse time
@@ -211,7 +211,7 @@ Current informal observations:
 ## Fuzzing
 
 **Status**: Not yet implemented
-**Planned**: v0.2.0
+**Planned**: v1.0.0
 
 Will include:
 - Random YAML generation
@@ -221,16 +221,16 @@ Will include:
 
 ## Conclusion
 
-shape-yaml v0.1.0 demonstrates strong test coverage and reliability:
+shape-yaml v0.9.0 demonstrates strong test coverage and reliability:
 
 ✅ **Core Functionality**: All essential parsing, marshaling, and unmarshaling features work correctly
 ✅ **API Stability**: Public APIs fully tested and working
 ✅ **Error Handling**: Clear error messages with position tracking
 ✅ **Documentation**: Comprehensive docs and examples
 
-⚠️ **Minor Issues**: 2 edge cases/advanced features not yet implemented (planned for v0.2.0)
+⚠️ **Minor Issues**: 2 edge cases/advanced features not yet implemented (planned for v1.0.0)
 
-**Recommendation**: v0.1.0 is suitable for production use for standard YAML files (mappings, sequences, scalars, nested structures). Users requiring anchors/aliases should wait for v0.2.0.
+**Recommendation**: v0.9.0 is suitable for production use for standard YAML files (mappings, sequences, scalars, nested structures). The 0.9.x version indicates production-ready quality while signaling that additional features will be added before the 1.0.0 stable release. Users requiring anchors/aliases should wait for v1.0.0.
 
 ## Test Commands
 
@@ -258,21 +258,22 @@ cd examples/basic && go run main.go
 
 ## Next Steps
 
-1. **v0.1.1** (patch release):
+1. **v0.9.1** (patch release):
    - Fix sequence of mappings edge case
    - Add more examples
    - Improve error messages
 
-2. **v0.2.0** (minor release):
+2. **v1.0.0** (stable release):
    - Implement fast parser
    - Add anchors/aliases support
    - Add multi-line string support
    - Add fuzzing tests
    - Add benchmarking suite
-   - Improve performance
+   - Full YAML 1.2 compliance
+   - API stability guarantee
 
 ---
 
-**Generated**: 2025-01-XX
-**Version**: shape-yaml v0.1.0
+**Generated**: 2025-01-25
+**Version**: shape-yaml v0.9.0
 **Test Framework**: Go 1.25 testing package
