@@ -81,7 +81,14 @@ func (it *IndentationTokenizer) NextToken() (*tokenizer.Token, bool) {
 		return token, true
 	}
 
-	// 5. At line start: measure indentation and emit INDENT/DEDENT
+	// 5. Skip whitespace tokens at line start - we measure indentation
+	//    from the first non-whitespace token
+	if it.atLineStart && token.Kind() == "Whitespace" {
+		// Don't reset atLineStart - we're still waiting for actual content
+		return token, true
+	}
+
+	// 6. At line start: measure indentation and emit INDENT/DEDENT
 	if it.atLineStart {
 		it.atLineStart = false
 
