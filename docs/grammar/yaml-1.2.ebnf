@@ -1,0 +1,381 @@
+// YAML 1.2 Grammar Specification
+// This grammar defines the YAML data format (YAML 1.2 Core Schema).
+//
+// Implementation Guide:
+// - Use LL(1) recursive descent parsing (see Shape ADR 0004)
+// - Each production rule becomes a parse function
+// - Return appropriate ast.SchemaNode types (LiteralNode for scalar data)
+// - Track indentation levels using a stack
+// - Provide context-aware error messages with line/column positions
+// - YAML is a data format, not a validation format
+//
+// Key AST Mapping:
+// - YAML mapping → ast.ObjectNode (properties: map[string]ast.SchemaNode)
+// - YAML sequence → ast.ObjectNode (numeric keys "0", "1", "2", ...)
+// - YAML scalar → ast.LiteralNode (string, int64, float64, bool, nil)
+// - Anchor (&name) → Store in parser's anchor map
+// - Alias (*name) → Deep copy from anchor map
+//
+// YAML vs JSON Differences:
+// - YAML: Indentation-based structure (no braces/brackets in block style)
+// - YAML: Unquoted strings by default
+// - YAML: Comments with # (JSON has no comments)
+// - YAML: Multi-line strings with | and >
+// - YAML: Anchors (&) and aliases (*) for references
+// - YAML: Multiple documents in one stream (---)
+// - YAML: Flow style (inline) {key: value} and [item1, item2]
+
+// =============================================================================
+// Top-Level Document Structure
+// =============================================================================
+
+// YAML stream: one or more documents
+// Parser function: ParseMultiDoc() -> []ast.SchemaNode
+// Example:
+//   ---
+//   name: doc1
+//   ---
+//   name: doc2
+Stream = [ DirectiveLine { DirectiveLine } ] Document { DocumentSeparator Document } ;
+
+// Single document
+// Parser function: Parse() -> ast.SchemaNode
+// Can be a mapping, sequence, or scalar
+Document = [ DocumentMarker ] [ Node ] ;
+
+// Document markers
+DocumentMarker = "---" | "..." ;
+DocumentSeparator = "---" Newline ;
+
+// Directive line (e.g., %YAML 1.2, %TAG ! tag:example.com,2000:)
+DirectiveLine = "%" DirectiveName DirectiveParameter* Newline ;
+DirectiveName = [A-Z]+ ;
+DirectiveParameter = [^\n]+ ;
+
+// =============================================================================
+// Nodes (Core YAML Content)
+// =============================================================================
+
+// Node: any YAML value (with optional anchor/tag)
+// Parser function: parseNode() -> ast.SchemaNode
+// Can have anchor (&name) and/or tag (!type)
+Node = [ Anchor ] [ Tag ] ( BlockNode | FlowNode ) ;
+
+// Block-style nodes (indentation-based)
+BlockNode = BlockMapping | BlockSequence | BlockScalar ;
+
+// Flow-style nodes (inline, JSON-like)
+FlowNode = FlowMapping | FlowSequence | FlowScalar ;
+
+// =============================================================================
+// Block Mapping (Indentation-based Key-Value Pairs)
+// =============================================================================
+
+// Block mapping: key-value pairs with consistent indentation
+// Parser function: parseBlockMapping() -> *ast.ObjectNode
+// Example:
+//   name: Alice
+//   age: 30
+//   address:
+//     city: NYC
+//     zip: 10001
+// Returns: ast.NewObjectNode(properties, position)
+BlockMapping = MappingEntry { MappingEntry } ;
+
+// Single mapping entry (key: value)
+// Parser function: parseMappingEntry() -> (key string, value ast.SchemaNode)
+// Key can be plain scalar, quoted string, or complex key (? marker)
+MappingEntry = [ Indent ] Key ":" [ " " ] Value [ Comment ] Newline ;
+
+// Mapping key
+Key = PlainScalar | QuotedScalar | ComplexKey ;
+
+// Complex key (allows structured keys with ? marker)
+// Example:
+//   ? [composite, key]
+//   : value
+ComplexKey = "?" " " Node ;
+
+// =============================================================================
+// Block Sequence (Indentation-based List)
+// =============================================================================
+
+// Block sequence: list items with dash markers
+// Parser function: parseBlockSequence() -> *ast.ObjectNode
+// Example:
+//   - item1
+//   - item2
+//   - nested:
+//       key: value
+// Returns: ast.NewObjectNode with numeric keys "0", "1", "2", ...
+BlockSequence = SequenceEntry { SequenceEntry } ;
+
+// Single sequence entry (- value)
+// Parser function: parseSequenceEntry() -> ast.SchemaNode
+SequenceEntry = [ Indent ] "-" [ " " ] Value [ Comment ] Newline ;
+
+// =============================================================================
+// Flow Mapping (Inline, JSON-style)
+// =============================================================================
+
+// Flow mapping: inline key-value pairs
+// Parser function: parseFlowMapping() -> *ast.ObjectNode
+// Example: {name: Alice, age: 30}
+// Example: {"quoted": "keys", unquoted: values}
+// Returns: ast.NewObjectNode(properties, position)
+FlowMapping = "{" [ FlowMappingEntry { "," FlowMappingEntry } ] "}" ;
+
+// Flow mapping entry
+FlowMappingEntry = Key ":" [ " " ] FlowNode ;
+
+// =============================================================================
+// Flow Sequence (Inline, JSON-style Array)
+// =============================================================================
+
+// Flow sequence: inline array
+// Parser function: parseFlowSequence() -> *ast.ObjectNode (numeric keys)
+// Example: [1, 2, 3]
+// Example: [apple, banana, cherry]
+// Returns: ast.NewObjectNode with numeric keys "0", "1", "2", ...
+FlowSequence = "[" [ FlowNode { "," FlowNode } ] "]" ;
+
+// =============================================================================
+// Scalars (Values)
+// =============================================================================
+
+// Value: any YAML value (mapping, sequence, or scalar)
+// Parser function: parseValue() -> ast.SchemaNode
+Value = BlockNode | FlowNode | Scalar ;
+
+// Scalar: primitive value
+// Parser function: parseScalar() -> *ast.LiteralNode
+Scalar = BlockScalar | FlowScalar ;
+
+// Block scalar: multi-line string with | or >
+BlockScalar = LiteralScalar | FoldedScalar ;
+
+// Flow scalar: inline value
+FlowScalar = QuotedScalar | PlainScalar ;
+
+// Literal scalar: preserves newlines (|)
+// Parser function: parseLiteralScalar() -> *ast.LiteralNode
+// Example:
+//   description: |
+//     Line 1
+//     Line 2
+//     Line 3
+// Returns: ast.NewLiteralNode("Line 1\nLine 2\nLine 3", position)
+LiteralScalar = "|" [ BlockChompIndicator ] Newline BlockContent ;
+
+// Folded scalar: folds newlines into spaces (>)
+// Parser function: parseFoldedScalar() -> *ast.LiteralNode
+// Example:
+//   summary: >
+//     This is a long
+//     sentence that spans
+//     multiple lines.
+// Returns: ast.NewLiteralNode("This is a long sentence that spans multiple lines.", position)
+FoldedScalar = ">" [ BlockChompIndicator ] Newline BlockContent ;
+
+// Block chomp indicator: controls trailing newlines
+// - (strip), + (keep), default (clip)
+BlockChompIndicator = "-" | "+" ;
+
+// Block content: indented lines
+BlockContent = { [ Indent ] TextLine Newline } ;
+TextLine = [^\n]+ ;
+
+// Quoted scalar: single or double quotes
+// Parser function: parseQuotedScalar() -> *ast.LiteralNode
+// Example: "hello world"
+// Example: 'single quotes'
+// Example: "escaped: \"quotes\""
+// Example: "unicode: \u03B1\u03B2"
+// Returns: ast.NewLiteralNode(string_value, position)
+QuotedScalar = DoubleQuotedScalar | SingleQuotedScalar ;
+
+// Double-quoted string (supports escape sequences)
+DoubleQuotedScalar = '"' { DoubleQuotedChar } '"' ;
+DoubleQuotedChar = UnescapedChar | EscapeSequence ;
+
+// Single-quoted string (no escape sequences except '')
+SingleQuotedScalar = "'" { SingleQuotedChar } "'" ;
+SingleQuotedChar = [^'] | "''" ;
+
+// Escape sequences in double-quoted strings
+// \0 \a \b \t \n \v \f \r \e \  \" \/ \\ \N \_ \L \P \uXXXX \UXXXXXXXX
+EscapeSequence = "\\" ( "0" | "a" | "b" | "t" | "n" | "v" | "f" | "r" | "e" | " " | '"' | "/" | "\\" | "N" | "_" | "L" | "P" | UnicodeEscape | Unicode32Escape ) ;
+
+// Unicode escape sequences
+UnicodeEscape = "u" HexDigit HexDigit HexDigit HexDigit ;
+Unicode32Escape = "U" HexDigit HexDigit HexDigit HexDigit HexDigit HexDigit HexDigit HexDigit ;
+HexDigit = [0-9a-fA-F] ;
+
+// Plain scalar: unquoted string, number, boolean, null
+// Parser function: parsePlainScalar() -> *ast.LiteralNode
+// Example: hello (string)
+// Example: 123 (number)
+// Example: 3.14 (number)
+// Example: true (boolean)
+// Example: null (null)
+// Example: 2025-12-25 (string - dates stored as strings)
+// Returns: ast.NewLiteralNode(value, position) where value is string, int64, float64, bool, or nil
+PlainScalar = PlainString | Number | Boolean | Null ;
+
+// Plain string: unquoted text
+// Cannot start with special characters: - ? : , [ ] { } # & * ! | > ' " % @ `
+// Cannot contain ": " or " #" sequences
+PlainString = PlainStartChar { PlainChar } ;
+PlainStartChar = [^-?:,\[\]{}#&*!|>'"%@`\n\t ] ;
+PlainChar = [^\n:#] ;
+
+// Number: integer or floating point
+// Parser function: parseNumber() -> *ast.LiteralNode
+// Example: 42 (int64)
+// Example: -17 (int64)
+// Example: 3.14 (float64)
+// Example: 1.23e10 (float64)
+// Example: 0o755 (octal - int64)
+// Example: 0x1A2B (hex - int64)
+// Returns: ast.NewLiteralNode(int64 or float64, position)
+Number = HexNumber | OctalNumber | DecimalNumber ;
+
+// Decimal number
+DecimalNumber = [ "-" | "+" ] Integer [ Fraction ] [ Exponent ] ;
+Integer = "0" | ( [1-9] { Digit } ) ;
+Digit = [0-9] ;
+Fraction = "." Digit+ ;
+Exponent = ( "e" | "E" ) [ "+" | "-" ] Digit+ ;
+
+// Hexadecimal number (0x prefix)
+HexNumber = "0x" HexDigit+ ;
+
+// Octal number (0o prefix)
+OctalNumber = "0o" OctalDigit+ ;
+OctalDigit = [0-7] ;
+
+// Boolean: true, false, yes, no, on, off
+// Parser function: parseBoolean() -> *ast.LiteralNode
+// Example: true
+// Example: yes
+// Example: on
+// YAML 1.2 Core Schema only accepts: true, false
+// Returns: ast.NewLiteralNode(bool, position)
+Boolean = "true" | "false" | "yes" | "no" | "on" | "off" ;
+
+// Null: null, ~
+// Parser function: parseNull() -> *ast.LiteralNode
+// Example: null
+// Example: ~
+// Returns: ast.NewLiteralNode(nil, position)
+Null = "null" | "~" ;
+
+// Unescaped character (for quoted strings)
+UnescapedChar = [^"\\\x00-\x1F] ;
+
+// =============================================================================
+// Anchors and Aliases (References)
+// =============================================================================
+
+// Anchor: defines a reusable node (&name)
+// Parser function: parseAnchoredNode() -> ast.SchemaNode
+// Example:
+//   defaults: &default
+//     timeout: 30
+// Implementation: Store node in parser.anchors["default"] = node
+Anchor = "&" AnchorName ;
+AnchorName = [a-zA-Z0-9_-]+ ;
+
+// Alias: references an anchored node (*name)
+// Parser function: parseAlias() -> ast.SchemaNode
+// Example:
+//   service:
+//     <<: *default
+// Implementation: Return deep copy of parser.anchors["default"]
+Alias = "*" AnchorName ;
+
+// Merge key (<<): special alias that merges mapping
+// Example:
+//   service:
+//     <<: *default
+//     name: api
+// Merges all keys from *default into service mapping
+MergeKey = "<<" ;
+
+// =============================================================================
+// Tags (Type Hints)
+// =============================================================================
+
+// Tag: explicit type annotation (!type)
+// Parser function: parseTag() -> string
+// Example: !!str (string type)
+// Example: !!int (integer type)
+// Example: !custom (custom type)
+// Example: !<tag:example.com,2000:type> (verbatim tag)
+Tag = "!" TagSuffix | "!!" TagSuffix | "!" "<" VerbatimTag ">" ;
+TagSuffix = [a-zA-Z0-9_-]+ ;
+VerbatimTag = [^>]+ ;
+
+// =============================================================================
+// Indentation and Whitespace
+// =============================================================================
+
+// Indentation: spaces (tabs not allowed in YAML)
+// Parser tracks indentation levels on a stack
+// Emit INDENT token when indentation increases
+// Emit DEDENT token when indentation decreases
+Indent = " "+ ;
+
+// Newline
+Newline = "\n" | "\r\n" ;
+
+// Comment: # followed by text until end of line
+// Parser function: skipComment() (comments are ignored)
+// Example: # this is a comment
+// Comments are skipped during tokenization
+Comment = "#" [^\n]* ;
+
+// Whitespace: spaces and tabs (outside of indentation)
+// Automatically consumed by tokenizer between tokens
+Whitespace = { " " | "\t" } ;
+
+// =============================================================================
+// Grammar Notes
+// =============================================================================
+
+// Indentation Handling:
+// - Track current indentation level
+// - Maintain indentation stack [0, 2, 4, ...] (column positions)
+// - When indentation increases: push new level, emit INDENT
+// - When indentation decreases: pop levels until match, emit DEDENT for each pop
+// - Indentation must be consistent (all spaces or all tabs, no mixing)
+
+// Array Representation:
+// - YAML sequences map to ast.ObjectNode with numeric keys
+// - Example: [a, b, c] → ObjectNode{"0": LiteralNode("a"), "1": LiteralNode("b"), "2": LiteralNode("c")}
+// - This maintains type distinction: [] ≠ {}
+
+// Anchor/Alias Implementation:
+// - Parser maintains: anchors map[string]ast.SchemaNode
+// - When parsing &name: anchors["name"] = node
+// - When parsing *name: return DeepCopy(anchors["name"])
+// - Deep copy prevents mutations from affecting original
+
+// Multi-line String Handling:
+// - Literal (|): Preserve newlines
+//   Input:  "Line 1\nLine 2"
+//   Output: LiteralNode("Line 1\nLine 2")
+// - Folded (>): Fold newlines to spaces
+//   Input:  "Line 1\nLine 2"
+//   Output: LiteralNode("Line 1 Line 2")
+
+// Type Detection for Plain Scalars:
+// 1. Try parsing as number (int or float)
+// 2. Try parsing as boolean (true/false/yes/no/on/off)
+// 3. Try parsing as null (null/~)
+// 4. Default to string
+
+// Error Handling:
+// - Provide line and column numbers in error messages
+// - Context-aware messages: "expected ':' after mapping key 'name' at line 5, column 12"
+// - Track positions in ast.Position{Line, Column, Offset}
