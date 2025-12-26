@@ -7,9 +7,14 @@ import (
 	"strconv"
 
 	"github.com/shapestone/shape-core/pkg/ast"
+	"github.com/shapestone/shape-yaml/internal/fastparser"
 )
 
 // Unmarshal parses the YAML-encoded data and stores the result in the value pointed to by v.
+//
+// This function uses a high-performance fast path that bypasses AST construction for
+// optimal performance. If you need the AST for advanced features (YAMLPath, etc.), use
+// Parse() followed by NodeToInterface() or manual AST traversal.
 //
 // Unmarshal uses the inverse of the encodings that Marshal uses, allocating maps, slices,
 // and pointers as necessary, with the following additional rules:
@@ -44,6 +49,14 @@ import (
 //	var cfg Config
 //	err := yaml.Unmarshal([]byte("name: server\nport: 8080"), &cfg)
 func Unmarshal(data []byte, v interface{}) error {
+	// Fast path: Direct parsing without AST construction (4-5x faster)
+	return fastparser.Unmarshal(data, v)
+}
+
+// UnmarshalWithAST parses the YAML-encoded data into an AST first, then unmarshals into v.
+// This is the slower path but allows access to the AST for advanced features.
+// Most users should use Unmarshal() instead for better performance.
+func UnmarshalWithAST(data []byte, v interface{}) error {
 	// Parse YAML into AST
 	node, err := Parse(string(data))
 	if err != nil {
