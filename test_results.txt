@@ -1,0 +1,461 @@
+?   	github.com/shapestone/shape-yaml/examples/basic	[no test files]
+=== RUN   TestDebugTokens
+    debug_test.go:22: BASE TOKENIZER - Tokens for input:
+        name: Alice
+        address:
+          city: NYC
+          zip: 10001
+    debug_test.go:31: Base Token 1: kind="String" value="name" row=1 col=1
+    debug_test.go:31: Base Token 2: kind="Colon" value=":" row=1 col=5
+    debug_test.go:31: Base Token 3: kind="Whitespace" value=" " row=1 col=6
+    debug_test.go:31: Base Token 4: kind="String" value="Alice" row=1 col=7
+    debug_test.go:31: Base Token 5: kind="Newline" value="\n" row=1 col=12
+    debug_test.go:31: Base Token 6: kind="String" value="address" row=2 col=1
+    debug_test.go:31: Base Token 7: kind="Colon" value=":" row=2 col=8
+    debug_test.go:31: Base Token 8: kind="Newline" value="\n" row=2 col=9
+    debug_test.go:31: Base Token 9: kind="Whitespace" value="  " row=3 col=1
+    debug_test.go:31: Base Token 10: kind="String" value="city" row=3 col=3
+    debug_test.go:31: Base Token 11: kind="Colon" value=":" row=3 col=7
+    debug_test.go:31: Base Token 12: kind="Whitespace" value=" " row=3 col=8
+    debug_test.go:31: Base Token 13: kind="String" value="NYC" row=3 col=9
+    debug_test.go:31: Base Token 14: kind="Newline" value="\n" row=3 col=12
+    debug_test.go:31: Base Token 15: kind="Whitespace" value="  " row=4 col=1
+    debug_test.go:31: Base Token 16: kind="String" value="zip" row=4 col=3
+    debug_test.go:31: Base Token 17: kind="Colon" value=":" row=4 col=6
+    debug_test.go:31: Base Token 18: kind="Whitespace" value=" " row=4 col=7
+    debug_test.go:31: Base Token 19: kind="Number" value="10001" row=4 col=8
+    debug_test.go:27: Base: NextToken returned false, stopping
+    debug_test.go:37: Base total tokens: 19
+    debug_test.go:45: 
+        INDENTED TOKENIZER - Tokens for input:
+        name: Alice
+        address:
+          city: NYC
+          zip: 10001
+    debug_test.go:54: Indented Token 1: kind="String" value="name" row=1 col=1
+    debug_test.go:54: Indented Token 2: kind="Colon" value=":" row=1 col=5
+    debug_test.go:54: Indented Token 3: kind="Whitespace" value=" " row=1 col=6
+    debug_test.go:54: Indented Token 4: kind="String" value="Alice" row=1 col=7
+    debug_test.go:54: Indented Token 5: kind="Newline" value="\n" row=1 col=12
+    debug_test.go:54: Indented Token 6: kind="String" value="address" row=2 col=1
+    debug_test.go:54: Indented Token 7: kind="Colon" value=":" row=2 col=8
+    debug_test.go:54: Indented Token 8: kind="Newline" value="\n" row=2 col=9
+    debug_test.go:54: Indented Token 9: kind="Whitespace" value="  " row=3 col=1
+    debug_test.go:54: Indented Token 10: kind="Indent" value="" row=-1 col=-1
+    debug_test.go:54: Indented Token 11: kind="String" value="city" row=3 col=3
+    debug_test.go:54: Indented Token 12: kind="Colon" value=":" row=3 col=7
+    debug_test.go:54: Indented Token 13: kind="Whitespace" value=" " row=3 col=8
+    debug_test.go:54: Indented Token 14: kind="String" value="NYC" row=3 col=9
+    debug_test.go:54: Indented Token 15: kind="Newline" value="\n" row=3 col=12
+    debug_test.go:54: Indented Token 16: kind="Whitespace" value="  " row=4 col=1
+    debug_test.go:54: Indented Token 17: kind="String" value="zip" row=4 col=3
+    debug_test.go:54: Indented Token 18: kind="Colon" value=":" row=4 col=6
+    debug_test.go:54: Indented Token 19: kind="Whitespace" value=" " row=4 col=7
+    debug_test.go:54: Indented Token 20: kind="Number" value="10001" row=4 col=8
+    debug_test.go:54: Indented Token 21: kind="Dedent" value="" row=-1 col=-1
+    debug_test.go:50: Indented: NextToken returned false, stopping
+    debug_test.go:60: Indented total tokens: 21
+--- PASS: TestDebugTokens (0.00s)
+=== RUN   TestParseEmptyDocument
+=== RUN   TestParseEmptyDocument/empty
+=== RUN   TestParseEmptyDocument/whitespace_only
+=== RUN   TestParseEmptyDocument/comments_only
+--- PASS: TestParseEmptyDocument (0.00s)
+    --- PASS: TestParseEmptyDocument/empty (0.00s)
+    --- PASS: TestParseEmptyDocument/whitespace_only (0.00s)
+    --- PASS: TestParseEmptyDocument/comments_only (0.00s)
+=== RUN   TestParseScalars
+=== RUN   TestParseScalars/plain_string
+=== RUN   TestParseScalars/double_quoted
+=== RUN   TestParseScalars/single_quoted
+=== RUN   TestParseScalars/quoted_with_spaces
+=== RUN   TestParseScalars/double_quote_escape
+=== RUN   TestParseScalars/single_quote_escape
+=== RUN   TestParseScalars/integer
+=== RUN   TestParseScalars/negative_integer
+=== RUN   TestParseScalars/zero
+=== RUN   TestParseScalars/float
+=== RUN   TestParseScalars/negative_float
+=== RUN   TestParseScalars/scientific_notation
+=== RUN   TestParseScalars/scientific_with_sign
+=== RUN   TestParseScalars/hex_number
+=== RUN   TestParseScalars/octal_number
+=== RUN   TestParseScalars/true
+=== RUN   TestParseScalars/false
+=== RUN   TestParseScalars/yes
+=== RUN   TestParseScalars/no
+=== RUN   TestParseScalars/null
+=== RUN   TestParseScalars/tilde_null
+--- PASS: TestParseScalars (0.00s)
+    --- PASS: TestParseScalars/plain_string (0.00s)
+    --- PASS: TestParseScalars/double_quoted (0.00s)
+    --- PASS: TestParseScalars/single_quoted (0.00s)
+    --- PASS: TestParseScalars/quoted_with_spaces (0.00s)
+    --- PASS: TestParseScalars/double_quote_escape (0.00s)
+    --- PASS: TestParseScalars/single_quote_escape (0.00s)
+    --- PASS: TestParseScalars/integer (0.00s)
+    --- PASS: TestParseScalars/negative_integer (0.00s)
+    --- PASS: TestParseScalars/zero (0.00s)
+    --- PASS: TestParseScalars/float (0.00s)
+    --- PASS: TestParseScalars/negative_float (0.00s)
+    --- PASS: TestParseScalars/scientific_notation (0.00s)
+    --- PASS: TestParseScalars/scientific_with_sign (0.00s)
+    --- PASS: TestParseScalars/hex_number (0.00s)
+    --- PASS: TestParseScalars/octal_number (0.00s)
+    --- PASS: TestParseScalars/true (0.00s)
+    --- PASS: TestParseScalars/false (0.00s)
+    --- PASS: TestParseScalars/yes (0.00s)
+    --- PASS: TestParseScalars/no (0.00s)
+    --- PASS: TestParseScalars/null (0.00s)
+    --- PASS: TestParseScalars/tilde_null (0.00s)
+=== RUN   TestParseStringEscapes
+=== RUN   TestParseStringEscapes/newline
+=== RUN   TestParseStringEscapes/tab
+=== RUN   TestParseStringEscapes/carriage_return
+=== RUN   TestParseStringEscapes/backslash
+=== RUN   TestParseStringEscapes/quote
+=== RUN   TestParseStringEscapes/unicode
+=== RUN   TestParseStringEscapes/multiple_escapes
+--- PASS: TestParseStringEscapes (0.00s)
+    --- PASS: TestParseStringEscapes/newline (0.00s)
+    --- PASS: TestParseStringEscapes/tab (0.00s)
+    --- PASS: TestParseStringEscapes/carriage_return (0.00s)
+    --- PASS: TestParseStringEscapes/backslash (0.00s)
+    --- PASS: TestParseStringEscapes/quote (0.00s)
+    --- PASS: TestParseStringEscapes/unicode (0.00s)
+    --- PASS: TestParseStringEscapes/multiple_escapes (0.00s)
+=== RUN   TestParseBlockMapping
+=== RUN   TestParseBlockMapping/simple_mapping
+=== RUN   TestParseBlockMapping/mapping_with_quoted_keys
+=== RUN   TestParseBlockMapping/nested_mapping
+    parser_test.go:187: Property "name": type=*ast.LiteralNode
+    parser_test.go:187: Property "address": type=*ast.ObjectNode
+=== RUN   TestParseBlockMapping/mapping_with_null_value
+=== RUN   TestParseBlockMapping/mapping_with_boolean_values
+--- PASS: TestParseBlockMapping (0.00s)
+    --- PASS: TestParseBlockMapping/simple_mapping (0.00s)
+    --- PASS: TestParseBlockMapping/mapping_with_quoted_keys (0.00s)
+    --- PASS: TestParseBlockMapping/nested_mapping (0.00s)
+    --- PASS: TestParseBlockMapping/mapping_with_null_value (0.00s)
+    --- PASS: TestParseBlockMapping/mapping_with_boolean_values (0.00s)
+=== RUN   TestParseBlockSequence
+=== RUN   TestParseBlockSequence/simple_sequence
+=== RUN   TestParseBlockSequence/sequence_of_numbers
+=== RUN   TestParseBlockSequence/nested_sequence
+=== RUN   TestParseBlockSequence/sequence_with_null_item
+--- PASS: TestParseBlockSequence (0.00s)
+    --- PASS: TestParseBlockSequence/simple_sequence (0.00s)
+    --- PASS: TestParseBlockSequence/sequence_of_numbers (0.00s)
+    --- PASS: TestParseBlockSequence/nested_sequence (0.00s)
+    --- PASS: TestParseBlockSequence/sequence_with_null_item (0.00s)
+=== RUN   TestParseFlowStyle
+=== RUN   TestParseFlowStyle/flow_mapping
+=== RUN   TestParseFlowStyle/flow_sequence
+=== RUN   TestParseFlowStyle/nested_flow_mapping
+=== RUN   TestParseFlowStyle/nested_flow_sequence
+=== RUN   TestParseFlowStyle/empty_flow_mapping
+=== RUN   TestParseFlowStyle/empty_flow_sequence
+--- PASS: TestParseFlowStyle (0.00s)
+    --- PASS: TestParseFlowStyle/flow_mapping (0.00s)
+    --- PASS: TestParseFlowStyle/flow_sequence (0.00s)
+    --- PASS: TestParseFlowStyle/nested_flow_mapping (0.00s)
+    --- PASS: TestParseFlowStyle/nested_flow_sequence (0.00s)
+    --- PASS: TestParseFlowStyle/empty_flow_mapping (0.00s)
+    --- PASS: TestParseFlowStyle/empty_flow_sequence (0.00s)
+=== RUN   TestParseMixedStyles
+=== RUN   TestParseMixedStyles/block_mapping_with_flow_sequence
+=== RUN   TestParseMixedStyles/flow_mapping_in_block_sequence
+--- PASS: TestParseMixedStyles (0.00s)
+    --- PASS: TestParseMixedStyles/block_mapping_with_flow_sequence (0.00s)
+    --- PASS: TestParseMixedStyles/flow_mapping_in_block_sequence (0.00s)
+=== RUN   TestParseAnchorsAndAliases
+=== RUN   TestParseAnchorsAndAliases/simple_anchor_and_alias
+=== RUN   TestParseAnchorsAndAliases/anchor_with_nested_structure
+    parser_test.go:473: unexpected error: in value for key "defaults": in anchored node &defaults: expected YAML value at line 1, column 20, got Newline
+--- FAIL: TestParseAnchorsAndAliases (0.00s)
+    --- PASS: TestParseAnchorsAndAliases/simple_anchor_and_alias (0.00s)
+    --- FAIL: TestParseAnchorsAndAliases/anchor_with_nested_structure (0.00s)
+=== RUN   TestParseComments
+=== RUN   TestParseComments/comments_in_mapping
+=== RUN   TestParseComments/comments_in_sequence
+--- PASS: TestParseComments (0.00s)
+    --- PASS: TestParseComments/comments_in_mapping (0.00s)
+    --- PASS: TestParseComments/comments_in_sequence (0.00s)
+=== RUN   TestParseComplexStructures
+=== RUN   TestParseComplexStructures/deeply_nested_mapping
+=== RUN   TestParseComplexStructures/mapping_with_sequence_values
+=== RUN   TestParseComplexStructures/sequence_of_mappings
+    parser_test.go:602: unexpected error: unexpected content after YAML document at <unknown position>
+--- FAIL: TestParseComplexStructures (0.00s)
+    --- PASS: TestParseComplexStructures/deeply_nested_mapping (0.00s)
+    --- PASS: TestParseComplexStructures/mapping_with_sequence_values (0.00s)
+    --- FAIL: TestParseComplexStructures/sequence_of_mappings (0.00s)
+=== RUN   TestParseErrors
+=== RUN   TestParseErrors/missing_colon
+=== RUN   TestParseErrors/duplicate_key
+=== RUN   TestParseErrors/undefined_alias
+=== RUN   TestParseErrors/invalid_flow_mapping
+=== RUN   TestParseErrors/unclosed_flow_mapping
+=== RUN   TestParseErrors/unclosed_flow_sequence
+=== RUN   TestParseErrors/trailing_comma_in_flow_mapping
+=== RUN   TestParseErrors/trailing_comma_in_flow_sequence
+--- PASS: TestParseErrors (0.00s)
+    --- PASS: TestParseErrors/missing_colon (0.00s)
+    --- PASS: TestParseErrors/duplicate_key (0.00s)
+    --- PASS: TestParseErrors/undefined_alias (0.00s)
+    --- PASS: TestParseErrors/invalid_flow_mapping (0.00s)
+    --- PASS: TestParseErrors/unclosed_flow_mapping (0.00s)
+    --- PASS: TestParseErrors/unclosed_flow_sequence (0.00s)
+    --- PASS: TestParseErrors/trailing_comma_in_flow_mapping (0.00s)
+    --- PASS: TestParseErrors/trailing_comma_in_flow_sequence (0.00s)
+=== RUN   TestParsePositions
+--- PASS: TestParsePositions (0.00s)
+FAIL
+FAIL	github.com/shapestone/shape-yaml/internal/parser	0.238s
+=== RUN   TestTokenizer_DoubleQuotedString
+=== RUN   TestTokenizer_DoubleQuotedString/simple_string
+=== RUN   TestTokenizer_DoubleQuotedString/empty_string
+=== RUN   TestTokenizer_DoubleQuotedString/string_with_escapes
+=== RUN   TestTokenizer_DoubleQuotedString/string_with_quote_escape
+=== RUN   TestTokenizer_DoubleQuotedString/string_with_unicode
+--- PASS: TestTokenizer_DoubleQuotedString (0.00s)
+    --- PASS: TestTokenizer_DoubleQuotedString/simple_string (0.00s)
+    --- PASS: TestTokenizer_DoubleQuotedString/empty_string (0.00s)
+    --- PASS: TestTokenizer_DoubleQuotedString/string_with_escapes (0.00s)
+    --- PASS: TestTokenizer_DoubleQuotedString/string_with_quote_escape (0.00s)
+    --- PASS: TestTokenizer_DoubleQuotedString/string_with_unicode (0.00s)
+=== RUN   TestTokenizer_SingleQuotedString
+=== RUN   TestTokenizer_SingleQuotedString/simple_string
+=== RUN   TestTokenizer_SingleQuotedString/empty_string
+=== RUN   TestTokenizer_SingleQuotedString/string_with_escaped_quote
+--- PASS: TestTokenizer_SingleQuotedString (0.00s)
+    --- PASS: TestTokenizer_SingleQuotedString/simple_string (0.00s)
+    --- PASS: TestTokenizer_SingleQuotedString/empty_string (0.00s)
+    --- PASS: TestTokenizer_SingleQuotedString/string_with_escaped_quote (0.00s)
+=== RUN   TestTokenizer_PlainString
+=== RUN   TestTokenizer_PlainString/simple_word
+=== RUN   TestTokenizer_PlainString/alphanumeric
+=== RUN   TestTokenizer_PlainString/with_underscore
+--- PASS: TestTokenizer_PlainString (0.00s)
+    --- PASS: TestTokenizer_PlainString/simple_word (0.00s)
+    --- PASS: TestTokenizer_PlainString/alphanumeric (0.00s)
+    --- PASS: TestTokenizer_PlainString/with_underscore (0.00s)
+=== RUN   TestTokenizer_Number
+=== RUN   TestTokenizer_Number/integer
+=== RUN   TestTokenizer_Number/negative_integer
+=== RUN   TestTokenizer_Number/float
+=== RUN   TestTokenizer_Number/scientific_notation
+=== RUN   TestTokenizer_Number/negative_exponent
+=== RUN   TestTokenizer_Number/hex_number
+=== RUN   TestTokenizer_Number/octal_number
+=== RUN   TestTokenizer_Number/zero
+--- PASS: TestTokenizer_Number (0.00s)
+    --- PASS: TestTokenizer_Number/integer (0.00s)
+    --- PASS: TestTokenizer_Number/negative_integer (0.00s)
+    --- PASS: TestTokenizer_Number/float (0.00s)
+    --- PASS: TestTokenizer_Number/scientific_notation (0.00s)
+    --- PASS: TestTokenizer_Number/negative_exponent (0.00s)
+    --- PASS: TestTokenizer_Number/hex_number (0.00s)
+    --- PASS: TestTokenizer_Number/octal_number (0.00s)
+    --- PASS: TestTokenizer_Number/zero (0.00s)
+=== RUN   TestTokenizer_Boolean
+=== RUN   TestTokenizer_Boolean/true
+=== RUN   TestTokenizer_Boolean/false
+=== RUN   TestTokenizer_Boolean/yes
+=== RUN   TestTokenizer_Boolean/no
+--- PASS: TestTokenizer_Boolean (0.00s)
+    --- PASS: TestTokenizer_Boolean/true (0.00s)
+    --- PASS: TestTokenizer_Boolean/false (0.00s)
+    --- PASS: TestTokenizer_Boolean/yes (0.00s)
+    --- PASS: TestTokenizer_Boolean/no (0.00s)
+=== RUN   TestTokenizer_Null
+=== RUN   TestTokenizer_Null/null
+=== RUN   TestTokenizer_Null/~
+--- PASS: TestTokenizer_Null (0.00s)
+    --- PASS: TestTokenizer_Null/null (0.00s)
+    --- PASS: TestTokenizer_Null/~ (0.00s)
+=== RUN   TestTokenizer_StructuralTokens
+=== RUN   TestTokenizer_StructuralTokens/:
+=== RUN   TestTokenizer_StructuralTokens/-
+=== RUN   TestTokenizer_StructuralTokens/,
+=== RUN   TestTokenizer_StructuralTokens/?
+=== RUN   TestTokenizer_StructuralTokens/{
+=== RUN   TestTokenizer_StructuralTokens/}
+=== RUN   TestTokenizer_StructuralTokens/[
+=== RUN   TestTokenizer_StructuralTokens/]
+--- PASS: TestTokenizer_StructuralTokens (0.00s)
+    --- PASS: TestTokenizer_StructuralTokens/: (0.00s)
+    --- PASS: TestTokenizer_StructuralTokens/- (0.00s)
+    --- PASS: TestTokenizer_StructuralTokens/, (0.00s)
+    --- PASS: TestTokenizer_StructuralTokens/? (0.00s)
+    --- PASS: TestTokenizer_StructuralTokens/{ (0.00s)
+    --- PASS: TestTokenizer_StructuralTokens/} (0.00s)
+    --- PASS: TestTokenizer_StructuralTokens/[ (0.00s)
+    --- PASS: TestTokenizer_StructuralTokens/] (0.00s)
+=== RUN   TestTokenizer_DocumentMarkers
+=== RUN   TestTokenizer_DocumentMarkers/---
+=== RUN   TestTokenizer_DocumentMarkers/...
+--- PASS: TestTokenizer_DocumentMarkers (0.00s)
+    --- PASS: TestTokenizer_DocumentMarkers/--- (0.00s)
+    --- PASS: TestTokenizer_DocumentMarkers/... (0.00s)
+=== RUN   TestTokenizer_Anchors
+=== RUN   TestTokenizer_Anchors/&anchor
+=== RUN   TestTokenizer_Anchors/&my-anchor
+=== RUN   TestTokenizer_Anchors/&anchor123
+--- PASS: TestTokenizer_Anchors (0.00s)
+    --- PASS: TestTokenizer_Anchors/&anchor (0.00s)
+    --- PASS: TestTokenizer_Anchors/&my-anchor (0.00s)
+    --- PASS: TestTokenizer_Anchors/&anchor123 (0.00s)
+=== RUN   TestTokenizer_Aliases
+=== RUN   TestTokenizer_Aliases/*alias
+=== RUN   TestTokenizer_Aliases/*my-alias
+=== RUN   TestTokenizer_Aliases/*alias123
+--- PASS: TestTokenizer_Aliases (0.00s)
+    --- PASS: TestTokenizer_Aliases/*alias (0.00s)
+    --- PASS: TestTokenizer_Aliases/*my-alias (0.00s)
+    --- PASS: TestTokenizer_Aliases/*alias123 (0.00s)
+=== RUN   TestTokenizer_Tags
+=== RUN   TestTokenizer_Tags/!tag
+=== RUN   TestTokenizer_Tags/!!str
+=== RUN   TestTokenizer_Tags/!custom-type
+--- PASS: TestTokenizer_Tags (0.00s)
+    --- PASS: TestTokenizer_Tags/!tag (0.00s)
+    --- PASS: TestTokenizer_Tags/!!str (0.00s)
+    --- PASS: TestTokenizer_Tags/!custom-type (0.00s)
+=== RUN   TestTokenizer_BlockScalars
+=== RUN   TestTokenizer_BlockScalars/|
+=== RUN   TestTokenizer_BlockScalars/>
+--- PASS: TestTokenizer_BlockScalars (0.00s)
+    --- PASS: TestTokenizer_BlockScalars/| (0.00s)
+    --- PASS: TestTokenizer_BlockScalars/> (0.00s)
+=== RUN   TestTokenizer_Comments
+=== RUN   TestTokenizer_Comments/#_this_is_a_comment
+=== RUN   TestTokenizer_Comments/#_another_comment_with_symbols:_!@#$%
+--- PASS: TestTokenizer_Comments (0.00s)
+    --- PASS: TestTokenizer_Comments/#_this_is_a_comment (0.00s)
+    --- PASS: TestTokenizer_Comments/#_another_comment_with_symbols:_!@#$% (0.00s)
+=== RUN   TestTokenizer_MergeKey
+--- PASS: TestTokenizer_MergeKey (0.00s)
+=== RUN   TestTokenizer_Newline
+=== RUN   TestTokenizer_Newline/newline
+=== RUN   TestTokenizer_Newline/newline#01
+--- PASS: TestTokenizer_Newline (0.00s)
+    --- PASS: TestTokenizer_Newline/newline (0.00s)
+    --- PASS: TestTokenizer_Newline/newline#01 (0.00s)
+=== RUN   TestTokenizer_SimpleKeyValue
+--- PASS: TestTokenizer_SimpleKeyValue (0.00s)
+=== RUN   TestTokenizer_FlowSequence
+--- PASS: TestTokenizer_FlowSequence (0.00s)
+=== RUN   TestTokenizer_FlowMapping
+--- PASS: TestTokenizer_FlowMapping (0.00s)
+=== RUN   TestTokenizer_OrderingMatters
+=== RUN   TestTokenizer_OrderingMatters/---_before_-
+=== RUN   TestTokenizer_OrderingMatters/..._before_.
+=== RUN   TestTokenizer_OrderingMatters/<<_before_::
+=== RUN   TestTokenizer_OrderingMatters/true_keyword_before_plain_string
+=== RUN   TestTokenizer_OrderingMatters/false_keyword_before_plain_string
+--- PASS: TestTokenizer_OrderingMatters (0.00s)
+    --- PASS: TestTokenizer_OrderingMatters/---_before_- (0.00s)
+    --- PASS: TestTokenizer_OrderingMatters/..._before_. (0.00s)
+    --- PASS: TestTokenizer_OrderingMatters/<<_before_:: (0.00s)
+    --- PASS: TestTokenizer_OrderingMatters/true_keyword_before_plain_string (0.00s)
+    --- PASS: TestTokenizer_OrderingMatters/false_keyword_before_plain_string (0.00s)
+=== RUN   TestTokenizer_ComplexDocument
+--- PASS: TestTokenizer_ComplexDocument (0.00s)
+PASS
+ok  	github.com/shapestone/shape-yaml/internal/tokenizer	(cached)
+=== RUN   TestParse
+--- PASS: TestParse (0.00s)
+=== RUN   TestParseReader
+--- PASS: TestParseReader (0.00s)
+=== RUN   TestValidate
+=== RUN   TestValidate/valid_mapping
+=== RUN   TestValidate/valid_sequence
+=== RUN   TestValidate/invalid_syntax
+--- PASS: TestValidate (0.00s)
+    --- PASS: TestValidate/valid_mapping (0.00s)
+    --- PASS: TestValidate/valid_sequence (0.00s)
+    --- PASS: TestValidate/invalid_syntax (0.00s)
+=== RUN   TestUnmarshal
+--- PASS: TestUnmarshal (0.00s)
+=== RUN   TestUnmarshalMap
+--- PASS: TestUnmarshalMap (0.00s)
+=== RUN   TestMarshal
+--- PASS: TestMarshal (0.00s)
+=== RUN   TestMarshalMap
+--- PASS: TestMarshalMap (0.00s)
+=== RUN   TestNodeToInterface
+--- PASS: TestNodeToInterface (0.00s)
+=== RUN   TestInterfaceToNode
+--- PASS: TestInterfaceToNode (0.00s)
+=== RUN   TestRoundTrip
+--- PASS: TestRoundTrip (0.00s)
+=== RUN   TestValidate_ValidYAML
+=== RUN   TestValidate_ValidYAML/simple_key-value
+=== RUN   TestValidate_ValidYAML/with_list
+    validator_test.go:73: Validate() failed for valid YAML: unexpected content after YAML document at line 2, column 1
+        YAML:
+        items:
+        - apple
+        - banana
+        - cherry
+=== RUN   TestValidate_ValidYAML/with_comments
+=== RUN   TestValidate_ValidYAML/empty
+=== RUN   TestValidate_ValidYAML/whitespace_only
+=== RUN   TestValidate_ValidYAML/boolean_values
+=== RUN   TestValidate_ValidYAML/null_values
+=== RUN   TestValidate_ValidYAML/quoted_strings
+=== RUN   TestValidate_ValidYAML/document_separator
+    validator_test.go:73: Validate() failed for valid YAML: expected YAML value at line 1, column 1, got DocSep
+        YAML:
+        ---
+        key: value
+=== RUN   TestValidate_ValidYAML/comment_with_hash_in_quotes
+--- FAIL: TestValidate_ValidYAML (0.00s)
+    --- PASS: TestValidate_ValidYAML/simple_key-value (0.00s)
+    --- FAIL: TestValidate_ValidYAML/with_list (0.00s)
+    --- PASS: TestValidate_ValidYAML/with_comments (0.00s)
+    --- PASS: TestValidate_ValidYAML/empty (0.00s)
+    --- PASS: TestValidate_ValidYAML/whitespace_only (0.00s)
+    --- PASS: TestValidate_ValidYAML/boolean_values (0.00s)
+    --- PASS: TestValidate_ValidYAML/null_values (0.00s)
+    --- PASS: TestValidate_ValidYAML/quoted_strings (0.00s)
+    --- FAIL: TestValidate_ValidYAML/document_separator (0.00s)
+    --- PASS: TestValidate_ValidYAML/comment_with_hash_in_quotes (0.00s)
+=== RUN   TestValidate_InvalidYAML_Tabs
+    validator_test.go:86: expected error message about tabs, got: unexpected content after YAML document at <unknown position>
+--- FAIL: TestValidate_InvalidYAML_Tabs (0.00s)
+=== RUN   TestValidate_InvalidYAML_Syntax
+=== RUN   TestValidate_InvalidYAML_Syntax/with_tabs
+=== RUN   TestValidate_InvalidYAML_Syntax/unclosed_double_quote
+=== RUN   TestValidate_InvalidYAML_Syntax/unclosed_single_quote
+--- PASS: TestValidate_InvalidYAML_Syntax (0.00s)
+    --- PASS: TestValidate_InvalidYAML_Syntax/with_tabs (0.00s)
+    --- PASS: TestValidate_InvalidYAML_Syntax/unclosed_double_quote (0.00s)
+    --- PASS: TestValidate_InvalidYAML_Syntax/unclosed_single_quote (0.00s)
+=== RUN   TestValidate_Numbers
+--- PASS: TestValidate_Numbers (0.00s)
+=== RUN   TestValidate_EmptyValue
+    validator_test.go:135: Validate() failed for YAML with empty value: in value for key "key": unexpected end of input
+--- FAIL: TestValidate_EmptyValue (0.00s)
+=== RUN   TestValidate_QuotedStringsWithSpecialChars
+=== RUN   TestValidate_QuotedStringsWithSpecialChars/double_quotes_with_colon
+=== RUN   TestValidate_QuotedStringsWithSpecialChars/single_quotes_with_colon
+=== RUN   TestValidate_QuotedStringsWithSpecialChars/escaped_quotes
+--- PASS: TestValidate_QuotedStringsWithSpecialChars (0.00s)
+    --- PASS: TestValidate_QuotedStringsWithSpecialChars/double_quotes_with_colon (0.00s)
+    --- PASS: TestValidate_QuotedStringsWithSpecialChars/single_quotes_with_colon (0.00s)
+    --- PASS: TestValidate_QuotedStringsWithSpecialChars/escaped_quotes (0.00s)
+=== RUN   TestValidate_ListItems
+=== RUN   TestValidate_ListItems/valid_list_with_spaces
+=== RUN   TestValidate_ListItems/valid_list_with_values
+    validator_test.go:199: Validate() error = unexpected content after YAML document at line 2, column 1, wantErr false
+=== RUN   TestValidate_ListItems/invalid_list_without_space
+    validator_test.go:199: Validate() error = <nil>, wantErr true
+--- FAIL: TestValidate_ListItems (0.00s)
+    --- PASS: TestValidate_ListItems/valid_list_with_spaces (0.00s)
+    --- FAIL: TestValidate_ListItems/valid_list_with_values (0.00s)
+    --- FAIL: TestValidate_ListItems/invalid_list_without_space (0.00s)
+FAIL
+FAIL	github.com/shapestone/shape-yaml/pkg/yaml	0.405s
+FAIL

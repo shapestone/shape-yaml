@@ -112,21 +112,22 @@ defer file.Close()
 node, err := yaml.ParseReader(file)
 ```
 
-## Dual-Path Architecture
+## Performance
 
-shape-yaml automatically chooses the optimal parsing strategy:
+shape-yaml currently uses an AST-based parser that provides:
 
-**Fast Path** (`Unmarshal`) - **9-10x faster**:
-- Direct byte → Go type conversion
-- No AST allocation
-- SWAR optimizations for whitespace/strings
-- Perfect for: API responses, config files, data processing
+- Full YAML 1.2 specification support
+- Universal AST representation (compatible with shape-json, shape-xml)
+- Consistent API across all Shape parsers
+- Comprehensive error reporting with line/column positions
 
-**AST Path** (`Parse`) - **Full features**:
+**AST Parser** - Current implementation:
 - Complete universal AST tree
 - Position tracking for errors
 - Tree manipulation and transformation
 - Perfect for: Tooling, validation, format conversion, YAMLPath queries
+
+**Note**: A fast parser implementation (bypassing AST construction for 9-10x speedup) is planned for v0.2.0. The current implementation prioritizes correctness and full YAML 1.2 spec compliance.
 
 ```go
 // Fast path - use when you just need Go structs
