@@ -1055,19 +1055,6 @@ func tryMatchCaseInsensitiveKeyword(stream tokenizer.Stream, keyword string, tok
 	return tokenizer.NewToken(tokenKind, peeked)
 }
 
-// toLowerASCII converts ASCII letters to lowercase
-func toLowerASCII(s string) string {
-	result := make([]rune, len(s))
-	for i, r := range s {
-		if r >= 'A' && r <= 'Z' {
-			result[i] = r + ('a' - 'A')
-		} else {
-			result[i] = r
-		}
-	}
-	return string(result)
-}
-
 // AnchorMatcher creates a matcher for YAML anchors.
 // Matches: &name where name is [a-zA-Z0-9_-]+
 func AnchorMatcher() tokenizer.Matcher {

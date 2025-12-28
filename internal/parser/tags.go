@@ -233,21 +233,3 @@ func (p *Parser) coerceToBool(node ast.SchemaNode) (ast.SchemaNode, error) {
 
 	return ast.NewLiteralNode(boolValue, node.Position()), nil
 }
-
-// skipWhitespaceOnly skips spaces and tabs but not newlines
-func (p *Parser) skipWhitespaceOnly() {
-	for {
-		token := p.peek()
-		if token == nil {
-			break
-		}
-
-		// Only skip if it's actual whitespace (spaces/tabs), not newlines
-		tokenValue := string(token.Value())
-		if tokenValue == " " || tokenValue == "\t" {
-			p.advance()
-		} else {
-			break
-		}
-	}
-}
