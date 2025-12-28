@@ -17,12 +17,12 @@ import (
 type Parser struct {
 	tokenizer   *tokenizer.IndentationTokenizer
 	current     *shapetokenizer.Token
-	next        *shapetokenizer.Token              // Two-token lookahead for disambiguating mappings vs scalars
+	next        *shapetokenizer.Token // Two-token lookahead for disambiguating mappings vs scalars
 	hasToken    bool
 	hasNext     bool
-	anchors     map[string]ast.SchemaNode          // Store &name anchors for later alias resolution
-	yamlVersion string                             // YAML version from %YAML directive
-	tagHandles  map[string]string                  // Tag handle mappings from %TAG directives
+	anchors     map[string]ast.SchemaNode // Store &name anchors for later alias resolution
+	yamlVersion string                    // YAML version from %YAML directive
+	tagHandles  map[string]string         // Tag handle mappings from %TAG directives
 }
 
 // NewParser creates a new YAML parser for the given input string.
@@ -399,9 +399,9 @@ func (p *Parser) parseBlockMapping() (*ast.ObjectNode, error) {
 // Returns *ast.ObjectNode with numeric keys "0", "1", "2", ...
 // Example:
 //
-//	- apple
-//	- banana
-//	- cherry
+//   - apple
+//   - banana
+//   - cherry
 //
 // Returns: ast.NewObjectNode with properties {"0": LiteralNode("apple"), "1": LiteralNode("banana"), ...}
 func (p *Parser) parseBlockSequence() (*ast.ObjectNode, error) {
@@ -898,7 +898,7 @@ func (p *Parser) skipWhitespaceAndComments() {
 // unquoteString removes quotes and unescapes a YAML string.
 // Handles:
 // - Double-quoted strings: "..." with \", \\, \n, \t, \r, \uXXXX
-// - Single-quoted strings: '...' with '' (doubled single quote)
+// - Single-quoted strings: '...' with ” (doubled single quote)
 // - Plain strings: returned as-is
 func (p *Parser) unquoteString(s string) string {
 	// Handle double-quoted strings
@@ -1156,7 +1156,7 @@ func (p *Parser) parseLiteralScalar() (*ast.LiteralNode, error) {
 		var lineParts []string
 		skipFirstWhitespace := true
 		for {
-			token := p.peekRaw()  // Use peekRaw() to not skip whitespace
+			token := p.peekRaw() // Use peekRaw() to not skip whitespace
 			if token == nil || token.Kind() == tokenizer.TokenNewline || token.Kind() == tokenizer.TokenDedent {
 				break
 			}
@@ -1291,7 +1291,7 @@ func (p *Parser) parseFoldedScalar() (*ast.LiteralNode, error) {
 		var lineParts []string
 		skipFirstWhitespace := true
 		for {
-			token := p.peekRaw()  // Use peekRaw() to not skip whitespace
+			token := p.peekRaw() // Use peekRaw() to not skip whitespace
 			if token == nil || token.Kind() == tokenizer.TokenNewline || token.Kind() == tokenizer.TokenDedent {
 				break
 			}

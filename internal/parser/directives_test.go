@@ -69,32 +69,32 @@ func TestDirectives_YAMLVersionDirective(t *testing.T) {
 // TestDirectives_TagDirective tests parsing of %TAG directive
 func TestDirectives_TagDirective(t *testing.T) {
 	tests := []struct {
-		name       string
-		input      string
-		wantErr    bool
-		tagHandle  string
-		tagPrefix  string
+		name      string
+		input     string
+		wantErr   bool
+		tagHandle string
+		tagPrefix string
 	}{
 		{
-			name:       "TAG directive with ! handle",
-			input:      "%TAG ! tag:example.com,2000:\n---\nname: value",
-			wantErr:    false,
-			tagHandle:  "!",
-			tagPrefix:  "tag:example.com,2000:",
+			name:      "TAG directive with ! handle",
+			input:     "%TAG ! tag:example.com,2000:\n---\nname: value",
+			wantErr:   false,
+			tagHandle: "!",
+			tagPrefix: "tag:example.com,2000:",
 		},
 		{
-			name:       "TAG directive with !! handle",
-			input:      "%TAG !! tag:yaml.org,2002:\n---\nname: value",
-			wantErr:    false,
-			tagHandle:  "!!",
-			tagPrefix:  "tag:yaml.org,2002:",
+			name:      "TAG directive with !! handle",
+			input:     "%TAG !! tag:yaml.org,2002:\n---\nname: value",
+			wantErr:   false,
+			tagHandle: "!!",
+			tagPrefix: "tag:yaml.org,2002:",
 		},
 		{
-			name:       "TAG directive with custom handle",
-			input:      "%TAG !e! tag:example.com,2000:app/\n---\nname: value",
-			wantErr:    false,
-			tagHandle:  "!e!",
-			tagPrefix:  "tag:example.com,2000:app/",
+			name:      "TAG directive with custom handle",
+			input:     "%TAG !e! tag:example.com,2000:app/\n---\nname: value",
+			wantErr:   false,
+			tagHandle: "!e!",
+			tagPrefix: "tag:example.com,2000:app/",
 		},
 	}
 

@@ -5,11 +5,11 @@ package tokenizer
 // These correspond to the terminals in the YAML grammar (docs/grammar/yaml-simple.ebnf).
 const (
 	// Structural tokens
-	TokenColon  = "Colon"  // :
-	TokenDash   = "Dash"   // -
-	TokenComma  = "Comma"  // , (flow style)
-	TokenLBrace = "LBrace" // { (flow style)
-	TokenRBrace = "RBrace" // } (flow style)
+	TokenColon    = "Colon"    // :
+	TokenDash     = "Dash"     // -
+	TokenComma    = "Comma"    // , (flow style)
+	TokenLBrace   = "LBrace"   // { (flow style)
+	TokenRBrace   = "RBrace"   // } (flow style)
 	TokenLBracket = "LBracket" // [ (flow style)
 	TokenRBracket = "RBracket" // ] (flow style)
 
@@ -25,17 +25,17 @@ const (
 	TokenNull   = "Null"   // null, ~
 
 	// Special tokens
-	TokenNewline     = "Newline"     // \n or \r\n
-	TokenComment     = "Comment"     // # ... (usually skipped)
-	TokenDocSep      = "DocSep"      // ---
-	TokenDocEnd      = "DocEnd"      // ...
-	TokenAnchor      = "Anchor"      // &name
-	TokenAlias       = "Alias"       // *name
-	TokenTag         = "Tag"         // !type or !!type
+	TokenNewline      = "Newline"      // \n or \r\n
+	TokenComment      = "Comment"      // # ... (usually skipped)
+	TokenDocSep       = "DocSep"       // ---
+	TokenDocEnd       = "DocEnd"       // ...
+	TokenAnchor       = "Anchor"       // &name
+	TokenAlias        = "Alias"        // *name
+	TokenTag          = "Tag"          // !type or !!type
 	TokenBlockLiteral = "BlockLiteral" // | (literal block)
 	TokenBlockFolded  = "BlockFolded"  // > (folded block)
-	TokenQuestion    = "Question"    // ? (complex key marker)
-	TokenMergeKey    = "MergeKey"    // <<
-	TokenDirective   = "Directive"   // %YAML or %TAG directive
-	TokenEOF         = "EOF"         // End of file
+	TokenQuestion     = "Question"     // ? (complex key marker)
+	TokenMergeKey     = "MergeKey"     // <<
+	TokenDirective    = "Directive"    // %YAML or %TAG directive
+	TokenEOF          = "EOF"          // End of file
 )

@@ -13,10 +13,10 @@ func TestUnclosedDoubleQuotes(t *testing.T) {
 		input   string
 		wantErr bool
 	}{
-		{"actual newline in string", "\"unclosed string\nmore content\"", true},  // Real newline should fail
-		{"escape sequence newline", `"unclosed string\nmore content"`, false},    // \n is valid escape
-		{"EOF in string", `"unclosed string`, true},                              // EOF without closing quote
-		{"escaped newline is OK", "\"line1\\nline2\"", false},                    // \n escape is OK
+		{"actual newline in string", "\"unclosed string\nmore content\"", true}, // Real newline should fail
+		{"escape sequence newline", `"unclosed string\nmore content"`, false},   // \n is valid escape
+		{"EOF in string", `"unclosed string`, true},                             // EOF without closing quote
+		{"escaped newline is OK", "\"line1\\nline2\"", false},                   // \n escape is OK
 	}
 
 	for _, tt := range tests {
@@ -51,8 +51,8 @@ func TestUnclosedSingleQuotes(t *testing.T) {
 		wantErr bool
 	}{
 		{"newline in string", "'unclosed string\nmore content'", false}, // Multi-line single quotes are OK in YAML
-		{"EOF in string", "'unclosed string", true},                      // EOF without closing quote is an error
-		{"multiple lines", "'line1\nline2'", false},                      // Multi-line single quotes are OK
+		{"EOF in string", "'unclosed string", true},                     // EOF without closing quote is an error
+		{"multiple lines", "'line1\nline2'", false},                     // Multi-line single quotes are OK
 	}
 
 	for _, tt := range tests {

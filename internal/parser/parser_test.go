@@ -1066,4 +1066,3 @@ func TestCaseInsensitiveBooleansInSequences(t *testing.T) {
 	assertLiteralValue(t, flags.Properties()["4"], true)
 	assertLiteralValue(t, flags.Properties()["5"], false)
 }
-

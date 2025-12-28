@@ -30,7 +30,7 @@ func TestParseNumberFormats(t *testing.T) {
 
 		// Scientific notation
 		{"exponent lowercase", "1e10", float64(1e10)},
-		{"exponent uppercase", "1E10", float64(1E10)},
+		{"exponent uppercase", "1E10", float64(1e10)},
 		{"exponent with plus", "1e+5", float64(1e+5)},
 		{"exponent with minus", "1e-5", float64(1e-5)},
 		{"float with exponent", "2.5e3", float64(2.5e3)},
@@ -330,7 +330,7 @@ name: Alice`,
 			},
 		},
 		{
-			name: "inline comment after value",
+			name:  "inline comment after value",
 			input: "name: Alice # this is a name",
 			check: func(t *testing.T, obj *ast.ObjectNode) {
 				assertPropertyCount(t, obj, 1)
@@ -450,7 +450,7 @@ func TestParseMixedBlockAndFlowStyles(t *testing.T) {
 		check func(*testing.T, *ast.ObjectNode)
 	}{
 		{
-			name: "block mapping with flow sequence value",
+			name:  "block mapping with flow sequence value",
 			input: `items: [1, 2, 3]`,
 			check: func(t *testing.T, obj *ast.ObjectNode) {
 				items := assertObjectNode(t, obj.Properties()["items"])
@@ -458,7 +458,7 @@ func TestParseMixedBlockAndFlowStyles(t *testing.T) {
 			},
 		},
 		{
-			name: "block mapping with flow mapping value",
+			name:  "block mapping with flow mapping value",
 			input: `config: {debug: true, verbose: false}`,
 			check: func(t *testing.T, obj *ast.ObjectNode) {
 				config := assertObjectNode(t, obj.Properties()["config"])

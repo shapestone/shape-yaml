@@ -10,11 +10,13 @@ import (
 // Directives must appear before the document content and before any document markers (---).
 //
 // Grammar:
-//   DirectiveLine = "%" DirectiveName DirectiveParameter* Newline ;
+//
+//	DirectiveLine = "%" DirectiveName DirectiveParameter* Newline ;
 //
 // Supported directives:
-//   %YAML 1.2         - Specifies YAML version
-//   %TAG ! prefix     - Defines a tag shorthand
+//
+//	%YAML 1.2         - Specifies YAML version
+//	%TAG ! prefix     - Defines a tag shorthand
 //
 // Unknown directives are ignored per YAML spec.
 func (p *Parser) parseDirectives() error {

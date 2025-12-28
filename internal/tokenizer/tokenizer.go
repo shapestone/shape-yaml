@@ -280,7 +280,7 @@ func doubleQuotedStringMatcherRune(stream tokenizer.Stream) *tokenizer.Token {
 }
 
 // SingleQuotedStringMatcher creates a matcher for YAML single-quoted strings.
-// Matches: '...' with only one escape: '' (doubled single quote) becomes '
+// Matches: '...' with only one escape: ” (doubled single quote) becomes '
 //
 // Grammar:
 //
@@ -876,7 +876,9 @@ func consumeOctalDigits(stream tokenizer.ByteStream) bool {
 
 // BooleanMatcher creates a case-insensitive matcher for YAML boolean keywords.
 // Matches: true, True, TRUE, false, False, FALSE, yes, Yes, YES, no, No, NO,
-//          on, On, ON, off, Off, OFF
+//
+//	on, On, ON, off, Off, OFF
+//
 // Returns TokenTrue or TokenFalse based on the matched value.
 func BooleanMatcher() tokenizer.Matcher {
 	return func(stream tokenizer.Stream) *tokenizer.Token {

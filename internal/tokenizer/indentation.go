@@ -28,11 +28,11 @@ import (
 //	  DEDENT, DEDENT
 type IndentationTokenizer struct {
 	base          tokenizer.Tokenizer
-	indentStack   []int              // Stack of indentation levels [0, 2, 4, ...]
-	pendingTokens []tokenizer.Token  // Queue of tokens to emit
-	atLineStart   bool               // Are we at the start of a line?
-	lastNewline   bool               // Did we just emit a newline?
-	columnAtStart int                // Column number at line start (for indentation)
+	indentStack   []int             // Stack of indentation levels [0, 2, 4, ...]
+	pendingTokens []tokenizer.Token // Queue of tokens to emit
+	atLineStart   bool              // Are we at the start of a line?
+	lastNewline   bool              // Did we just emit a newline?
+	columnAtStart int               // Column number at line start (for indentation)
 }
 
 // NewIndentationTokenizer creates an indentation-aware tokenizer that wraps a base tokenizer.
