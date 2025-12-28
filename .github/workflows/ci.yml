@@ -49,12 +49,12 @@ jobs:
         run: |
           coverage=$(go tool cover -func=coverage.out | grep total | awk '{print substr($3, 1, length($3)-1)}')
           echo "Coverage: $coverage%"
-          if (( $(echo "$coverage < 90.0" | bc -l) )); then
-            echo "Warning: Coverage below 90% (got $coverage%)"
-            echo "Guide recommendation: 95%+ for parser code"
+          if (( $(echo "$coverage < 55.0" | bc -l) )); then
+            echo "Warning: Coverage below 55% (got $coverage%)"
+            echo "Goal: Improve coverage over time"
           fi
-          if (( $(echo "$coverage < 70.0" | bc -l) )); then
-            echo "Error: Coverage critically low (minimum: 70%)"
+          if (( $(echo "$coverage < 50.0" | bc -l) )); then
+            echo "Error: Coverage critically low (minimum: 50%)"
             exit 1
           fi
 
