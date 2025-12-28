@@ -2,10 +2,16 @@
 
 > **Part of the [Shape Parser™ Ecosystem](https://github.com/shapestone/shape)** — Universal AST for YAML, JSON, XML, and more.
 
+[![Build Status](https://github.com/shapestone/shape-yaml/actions/workflows/ci.yml/badge.svg)](https://github.com/shapestone/shape-yaml/actions/workflows/ci.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/shapestone/shape-yaml)](https://goreportcard.com/report/github.com/shapestone/shape-yaml)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go)](https://go.dev/)
-[![Tests](https://img.shields.io/badge/tests-439%20passing-success)](./PARSER_STATUS.md)
-[![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)](./PARSER_STATUS.md)
+[![codecov](https://codecov.io/gh/shapestone/shape-yaml/branch/main/graph/badge.svg?v=3)](https://codecov.io/gh/shapestone/shape-yaml)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/shapestone/shape-yaml)](https://go.dev/)
+[![Latest Release](https://img.shields.io/github/v/release/shapestone/shape-yaml?v=2)](https://github.com/shapestone/shape-yaml/releases)
+[![GoDoc](https://pkg.go.dev/badge/github.com/shapestone/shape-yaml.svg)](https://pkg.go.dev/github.com/shapestone/shape-yaml)
+[![CodeQL](https://github.com/shapestone/shape-yaml/actions/workflows/codeql.yml/badge.svg)](https://github.com/shapestone/shape-yaml/actions/workflows/codeql.yml)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/shapestone/shape-yaml/badge)](https://securityscorecards.dev/viewer/?uri=github.com/shapestone/shape-yaml)
+[![Security Policy](https://img.shields.io/badge/Security-Policy-brightgreen)](./SECURITY.md)
 
 **Repository:** github.com/shapestone/shape-yaml
 

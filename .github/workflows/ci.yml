@@ -1,0 +1,97 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          path: shape-yaml
+
+      - name: Checkout shape-core
+        uses: actions/checkout@v3
+        with:
+          repository: shapestone/shape-core
+          path: shape-core
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          check-latest: true
+
+      - name: Verify grammar files exist
+        working-directory: shape-yaml
+        run: |
+          if [ ! -f docs/grammar/yaml-1.2.ebnf ]; then
+            echo "Error: Grammar file missing at docs/grammar/yaml-1.2.ebnf"
+            exit 1
+          fi
+          echo "✓ YAML 1.2 grammar file exists (yaml-1.2.ebnf)"
+
+      - name: Run grammar verification tests
+        working-directory: shape-yaml
+        run: go test -v ./internal/parser -run TestGrammar
+
+      - name: Run tests
+        working-directory: shape-yaml
+        run: go test -v -race -coverprofile=coverage.out ./internal/... ./pkg/...
+
+      - name: Check coverage
+        working-directory: shape-yaml
+        run: |
+          coverage=$(go tool cover -func=coverage.out | grep total | awk '{print substr($3, 1, length($3)-1)}')
+          echo "Coverage: $coverage%"
+          if (( $(echo "$coverage < 90.0" | bc -l) )); then
+            echo "Warning: Coverage below 90% (got $coverage%)"
+            echo "Guide recommendation: 95%+ for parser code"
+          fi
+          if (( $(echo "$coverage < 70.0" | bc -l) )); then
+            echo "Error: Coverage critically low (minimum: 70%)"
+            exit 1
+          fi
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./shape-yaml/coverage.out
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+          verbose: true
+
+      - name: Build
+        working-directory: shape-yaml
+        run: go build $(go list ./... | grep -v '/scripts')
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          path: shape-yaml
+
+      - name: Checkout shape-core
+        uses: actions/checkout@v3
+        with:
+          repository: shapestone/shape-core
+          path: shape-core
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          check-latest: true
+
+      - name: Run linter
+        uses: golangci/golangci-lint-action@v3
+        with:
+          version: latest
+          working-directory: shape-yaml
+          skip-pkg-cache: true
+          skip-build-cache: true
