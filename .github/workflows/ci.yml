@@ -25,6 +25,7 @@ jobs:
         with:
           go-version: '1.23'
           check-latest: true
+          cache-dependency-path: shape-yaml/go.sum
 
       - name: Verify grammar files exist
         working-directory: shape-yaml
@@ -87,6 +88,7 @@ jobs:
         with:
           go-version: '1.23'
           check-latest: true
+          cache-dependency-path: shape-yaml/go.sum
 
       - name: Run linter
         uses: golangci/golangci-lint-action@v3
