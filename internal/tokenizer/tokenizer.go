@@ -32,10 +32,8 @@ func NewTokenizer() tokenizer.Tokenizer {
 		tokenizer.StringMatcherFunc(TokenMergeKey, "<<"),
 
 		// Keywords (before plain strings)
-		tokenizer.StringMatcherFunc(TokenTrue, "true"),
-		tokenizer.StringMatcherFunc(TokenFalse, "false"),
-		tokenizer.StringMatcherFunc(TokenTrue, "yes"),
-		tokenizer.StringMatcherFunc(TokenFalse, "no"),
+		// Case-insensitive booleans (true/True/TRUE, yes/Yes/YES, on/On/ON, etc.)
+		BooleanMatcher(),
 		tokenizer.StringMatcherFunc(TokenNull, "null"),
 		tokenizer.CharMatcherFunc(TokenNull, '~'),
 
@@ -64,6 +62,9 @@ func NewTokenizer() tokenizer.Tokenizer {
 
 		// Tags
 		TagMatcher(),
+
+		// Directives (before comments, as % could appear in content)
+		DirectiveMatcher(),
 
 		// Comments (captured for potential filtering)
 		CommentMatcher(),
@@ -172,9 +173,23 @@ func doubleQuotedStringMatcherByte(stream tokenizer.ByteStream) *tokenizer.Token
 			switch escaped {
 			case '"', '\\', '/', 'b', 'f', 'n', 'r', 't', '0':
 				// Valid single-char escape
+			case 'a', 'v', 'e', ' ', 'N', '_', 'L', 'P':
+				// Advanced YAML 1.2 escape sequences
+				// \a=bell, \v=vtab, \e=escape, \ =space, \N=NEL, \_=nbsp, \L=line separator, \P=paragraph separator
 			case 'u':
 				// Unicode escape - consume 4 hex digits
 				for i := 0; i < 4; i++ {
+					hex, ok := stream.NextByte()
+					if !ok {
+						return nil
+					}
+					if !isHexDigitByte(hex) {
+						return nil
+					}
+				}
+			case 'U':
+				// 8-digit Unicode escape - consume 8 hex digits
+				for i := 0; i < 8; i++ {
 					hex, ok := stream.NextByte()
 					if !ok {
 						return nil
@@ -226,9 +241,24 @@ func doubleQuotedStringMatcherRune(stream tokenizer.Stream) *tokenizer.Token {
 			switch r {
 			case '"', '\\', '/', 'b', 'f', 'n', 'r', 't', '0':
 				// Valid single-char escape
+			case 'a', 'v', 'e', ' ', 'N', '_', 'L', 'P':
+				// Advanced YAML 1.2 escape sequences
+				// \a=bell, \v=vtab, \e=escape, \ =space, \N=NEL, \_=nbsp, \L=line separator, \P=paragraph separator
 			case 'u':
 				// Unicode escape - consume 4 hex digits
 				for i := 0; i < 4; i++ {
+					r, ok := stream.NextChar()
+					if !ok {
+						return nil
+					}
+					if !isHexDigit(r) {
+						return nil
+					}
+					value = append(value, r)
+				}
+			case 'U':
+				// 8-digit Unicode escape - consume 8 hex digits
+				for i := 0; i < 8; i++ {
 					r, ok := stream.NextChar()
 					if !ok {
 						return nil
@@ -844,6 +874,200 @@ func consumeOctalDigits(stream tokenizer.ByteStream) bool {
 	return hasDigits
 }
 
+// BooleanMatcher creates a case-insensitive matcher for YAML boolean keywords.
+// Matches: true, True, TRUE, false, False, FALSE, yes, Yes, YES, no, No, NO,
+//          on, On, ON, off, Off, OFF
+// Returns TokenTrue or TokenFalse based on the matched value.
+func BooleanMatcher() tokenizer.Matcher {
+	return func(stream tokenizer.Stream) *tokenizer.Token {
+		// Try ByteStream fast path if available
+		if byteStream, ok := stream.(tokenizer.ByteStream); ok {
+			return booleanMatcherByte(byteStream)
+		}
+
+		// Fallback to rune-based matcher
+		return booleanMatcherRune(stream)
+	}
+}
+
+// booleanMatcherByte uses ByteStream to peek ahead without consuming
+func booleanMatcherByte(stream tokenizer.ByteStream) *tokenizer.Token {
+	// Try each boolean keyword in order (longest first to avoid partial matches)
+	keywords := []struct {
+		word      string
+		tokenKind string
+	}{
+		{"false", TokenFalse},
+		{"true", TokenTrue},
+		{"yes", TokenTrue},
+		{"off", TokenFalse},
+		{"on", TokenTrue},
+		{"no", TokenFalse},
+	}
+
+	for _, kw := range keywords {
+		if token := tryMatchKeywordByte(stream, kw.word, kw.tokenKind); token != nil {
+			return token
+		}
+	}
+
+	return nil
+}
+
+// tryMatchKeywordByte attempts to match a keyword case-insensitively using ByteStream
+func tryMatchKeywordByte(stream tokenizer.ByteStream, keyword string, tokenKind string) *tokenizer.Token {
+	// Peek ahead at the bytes we need
+	remaining := stream.RemainingBytes()
+	if len(remaining) < len(keyword) {
+		return nil
+	}
+
+	// Check if keyword matches case-insensitively
+	for i := 0; i < len(keyword); i++ {
+		b := remaining[i]
+		expected := keyword[i]
+
+		// Convert to lowercase for comparison
+		if b >= 'A' && b <= 'Z' {
+			b = b + ('a' - 'A')
+		}
+
+		if b != expected {
+			return nil
+		}
+	}
+
+	// Check word boundary - next byte must not be alphanumeric, underscore, or dash
+	if len(remaining) > len(keyword) {
+		nextByte := remaining[len(keyword)]
+		if (nextByte >= 'a' && nextByte <= 'z') ||
+			(nextByte >= 'A' && nextByte <= 'Z') ||
+			(nextByte >= '0' && nextByte <= '9') ||
+			nextByte == '_' || nextByte == '-' {
+			// Not a word boundary
+			return nil
+		}
+	}
+
+	// Match found - consume the bytes
+	startPos := stream.BytePosition()
+	for i := 0; i < len(keyword); i++ {
+		stream.NextByte()
+	}
+
+	// Get the actual matched bytes (preserves original case)
+	matched := stream.SliceFrom(startPos)
+	return tokenizer.NewToken(tokenKind, []rune(string(matched)))
+}
+
+// booleanMatcherRune is the fallback for non-ByteStream
+func booleanMatcherRune(stream tokenizer.Stream) *tokenizer.Token {
+	// For rune streams, we try each keyword
+	keywords := []struct {
+		word      string
+		tokenKind string
+	}{
+		{"false", TokenFalse},
+		{"true", TokenTrue},
+		{"yes", TokenTrue},
+		{"off", TokenFalse},
+		{"on", TokenTrue},
+		{"no", TokenFalse},
+	}
+
+	for _, kw := range keywords {
+		if token := tryMatchCaseInsensitiveKeyword(stream, kw.word, kw.tokenKind); token != nil {
+			return token
+		}
+	}
+
+	return nil
+}
+
+// tryMatchCaseInsensitiveKeyword tries to match a keyword case-insensitively
+// and ensures it's followed by a word boundary.
+func tryMatchCaseInsensitiveKeyword(stream tokenizer.Stream, keyword string, tokenKind string) *tokenizer.Token {
+	// Peek at first character to quick-reject
+	firstChar, ok := stream.PeekChar()
+	if !ok {
+		return nil
+	}
+
+	// Case-insensitive comparison with first character of keyword
+	lowerFirst := firstChar
+	if firstChar >= 'A' && firstChar <= 'Z' {
+		lowerFirst = firstChar + ('a' - 'A')
+	}
+
+	if lowerFirst != rune(keyword[0]) {
+		return nil
+	}
+
+	// For each position, we need to peek without consuming
+	// Build a list of what we expect to match
+	keywordRunes := []rune(keyword)
+
+	// Check if we can read enough characters
+	var peeked []rune
+	for i := 0; i < len(keywordRunes); i++ {
+		r, ok := stream.PeekChar()
+		if !ok {
+			return nil
+		}
+
+		// Verify case-insensitive match
+		lowerR := r
+		if r >= 'A' && r <= 'Z' {
+			lowerR = r + ('a' - 'A')
+		}
+
+		if lowerR != keywordRunes[i] {
+			return nil
+		}
+
+		peeked = append(peeked, r)
+
+		// Move to next character for peeking
+		if i < len(keywordRunes)-1 {
+			stream.NextChar()
+		}
+	}
+
+	// Now stream is positioned at the last character of the keyword
+	// Consume it
+	stream.NextChar()
+
+	// Check word boundary
+	nextChar, ok := stream.PeekChar()
+	if ok {
+		if (nextChar >= 'a' && nextChar <= 'z') ||
+			(nextChar >= 'A' && nextChar <= 'Z') ||
+			(nextChar >= '0' && nextChar <= '9') ||
+			nextChar == '_' || nextChar == '-' {
+			// Not a word boundary - but we already consumed characters!
+			// This is the fundamental problem - can't rewind.
+			// The boolean matcher must be ordered carefully.
+			// For now, we have to accept this limitation.
+			return nil
+		}
+	}
+
+	return tokenizer.NewToken(tokenKind, peeked)
+}
+
+// toLowerASCII converts ASCII letters to lowercase
+func toLowerASCII(s string) string {
+	result := make([]rune, len(s))
+	for i, r := range s {
+		if r >= 'A' && r <= 'Z' {
+			result[i] = r + ('a' - 'A')
+		} else {
+			result[i] = r
+		}
+	}
+	return string(result)
+}
+
 // AnchorMatcher creates a matcher for YAML anchors.
 // Matches: &name where name is [a-zA-Z0-9_-]+
 func AnchorMatcher() tokenizer.Matcher {
@@ -923,7 +1147,11 @@ func AliasMatcher() tokenizer.Matcher {
 }
 
 // TagMatcher creates a matcher for YAML tags.
-// Matches: !name or !!name where name is [a-zA-Z0-9_-]+
+// Matches: !name, !!name, or !<verbatim> where name is [a-zA-Z0-9_-]+
+// Examples:
+//   - !Person (custom tag)
+//   - !!str (core tag)
+//   - !<tag:example.com,2000:type> (verbatim tag)
 func TagMatcher() tokenizer.Matcher {
 	return func(stream tokenizer.Stream) *tokenizer.Token {
 		// Check for !
@@ -936,8 +1164,30 @@ func TagMatcher() tokenizer.Matcher {
 		stream.NextChar()
 		value = append(value, r)
 
-		// Check for optional second !
+		// Check for verbatim tag: !<...>
 		r, ok = stream.PeekChar()
+		if ok && r == '<' {
+			stream.NextChar()
+			value = append(value, r)
+
+			// Consume everything until >
+			for {
+				r, ok := stream.PeekChar()
+				if !ok {
+					// Unterminated verbatim tag
+					return nil
+				}
+				stream.NextChar()
+				value = append(value, r)
+				if r == '>' {
+					break
+				}
+			}
+
+			return tokenizer.NewToken(TokenTag, value)
+		}
+
+		// Check for optional second ! (core tags)
 		if ok && r == '!' {
 			stream.NextChar()
 			value = append(value, r)
@@ -966,6 +1216,56 @@ func TagMatcher() tokenizer.Matcher {
 		}
 
 		return tokenizer.NewToken(TokenTag, value)
+	}
+}
+
+// DirectiveMatcher creates a matcher for YAML directives.
+// Matches: %YAML 1.2 or %TAG ! tag:example.com,2000:
+// Grammar: "%" DirectiveName DirectiveParameter* Newline
+func DirectiveMatcher() tokenizer.Matcher {
+	return func(stream tokenizer.Stream) *tokenizer.Token {
+		// Check for %
+		r, ok := stream.PeekChar()
+		if !ok || r != '%' {
+			return nil
+		}
+
+		var value []rune
+		stream.NextChar()
+		value = append(value, r)
+
+		// Consume directive name (uppercase letters)
+		hasName := false
+		for {
+			r, ok := stream.PeekChar()
+			if !ok {
+				break
+			}
+			if r >= 'A' && r <= 'Z' {
+				stream.NextChar()
+				value = append(value, r)
+				hasName = true
+			} else {
+				break
+			}
+		}
+
+		if !hasName {
+			// Not a valid directive
+			return nil
+		}
+
+		// Consume the rest of the directive line (parameters)
+		for {
+			r, ok := stream.PeekChar()
+			if !ok || r == '\n' || r == '\r' {
+				break
+			}
+			stream.NextChar()
+			value = append(value, r)
+		}
+
+		return tokenizer.NewToken(TokenDirective, value)
 	}
 }
 

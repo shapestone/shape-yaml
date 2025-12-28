@@ -1,0 +1,9 @@
+# Benchmark output files (regenerate with 'make bench')
+*.prof
+*.txt
+results/
+history/
+
+# Keep these files
+!README.md
+!.gitignore

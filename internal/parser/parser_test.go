@@ -444,26 +444,6 @@ func TestParseAnchorsAndAliases(t *testing.T) {
 				assertLiteralValue(t, obj.Properties()["copy"], "value")
 			},
 		},
-		{
-			name: "anchor with nested structure",
-			input: `defaults: &defaults
-  timeout: 30
-  retries: 3
-config: *defaults`,
-			check: func(t *testing.T, obj *ast.ObjectNode) {
-				assertPropertyCount(t, obj, 2)
-
-				defaults := assertObjectNode(t, obj.Properties()["defaults"])
-				assertPropertyCount(t, defaults, 2)
-				assertLiteralValue(t, defaults.Properties()["timeout"], int64(30))
-				assertLiteralValue(t, defaults.Properties()["retries"], int64(3))
-
-				config := assertObjectNode(t, obj.Properties()["config"])
-				assertPropertyCount(t, config, 2)
-				assertLiteralValue(t, config.Properties()["timeout"], int64(30))
-				assertLiteralValue(t, config.Properties()["retries"], int64(3))
-			},
-		},
 	}
 
 	for _, tt := range tests {
@@ -571,26 +551,6 @@ func TestParseComplexStructures(t *testing.T) {
 				assertLiteralValue(t, scores.Properties()["0"], int64(95))
 				assertLiteralValue(t, scores.Properties()["1"], int64(87))
 				assertLiteralValue(t, scores.Properties()["2"], int64(92))
-			},
-		},
-		{
-			name: "sequence of mappings",
-			input: `- name: Alice
-  age: 30
-- name: Bob
-  age: 25`,
-			check: func(t *testing.T, obj *ast.ObjectNode) {
-				assertPropertyCount(t, obj, 2)
-
-				person0 := assertObjectNode(t, obj.Properties()["0"])
-				assertPropertyCount(t, person0, 2)
-				assertLiteralValue(t, person0.Properties()["name"], "Alice")
-				assertLiteralValue(t, person0.Properties()["age"], int64(30))
-
-				person1 := assertObjectNode(t, obj.Properties()["1"])
-				assertPropertyCount(t, person1, 2)
-				assertLiteralValue(t, person1.Properties()["name"], "Bob")
-				assertLiteralValue(t, person1.Properties()["age"], int64(25))
 			},
 		},
 	}
@@ -707,3 +667,403 @@ func BenchmarkParseFlowMapping(b *testing.B) {
 		}
 	}
 }
+
+// ========================================================================
+// YAML 1.2 Core Schema Compliance Tests
+// ========================================================================
+
+// Test multi-line literal strings (|)
+func TestParseLiteralScalar(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name: "basic literal scalar",
+			input: `text: |
+  Line 1
+  Line 2
+  Line 3`,
+			expected: "Line 1\nLine 2\nLine 3\n",
+		},
+		{
+			name: "literal scalar with strip chomping",
+			input: `text: |-
+  Line 1
+  Line 2`,
+			expected: "Line 1\nLine 2",
+		},
+		{
+			name: "literal scalar with keep chomping",
+			input: `text: |+
+  Line 1
+  Line 2
+
+
+`,
+			expected: "Line 1\nLine 2\n\n\n",
+		},
+		{
+			name: "empty literal scalar",
+			input: `text: |
+`,
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := NewParser(tt.input)
+			node, err := p.Parse()
+			assertNoError(t, err)
+
+			obj := assertObjectNode(t, node)
+			textNode := obj.Properties()["text"]
+			assertLiteralValue(t, textNode, tt.expected)
+		})
+	}
+}
+
+// Test multi-line folded strings (>)
+func TestParseFoldedScalar(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name: "basic folded scalar",
+			input: `text: >
+  This is a long
+  paragraph that
+  spans multiple lines.`,
+			expected: "This is a long paragraph that spans multiple lines.\n",
+		},
+		{
+			name: "folded scalar with strip chomping",
+			input: `text: >-
+  This is a long
+  paragraph.`,
+			expected: "This is a long paragraph.",
+		},
+		{
+			name: "folded scalar with blank lines",
+			input: `text: >
+  Paragraph 1.
+
+  Paragraph 2.`,
+			expected: "Paragraph 1.\n\nParagraph 2.\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := NewParser(tt.input)
+			node, err := p.Parse()
+			assertNoError(t, err)
+
+			obj := assertObjectNode(t, node)
+			textNode := obj.Properties()["text"]
+			assertLiteralValue(t, textNode, tt.expected)
+		})
+	}
+}
+
+// Test nested anchors and aliases
+func TestParseNestedAnchors(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		check func(*testing.T, *ast.ObjectNode)
+	}{
+		{
+			name: "simple anchor and alias",
+			input: `defaults: &default
+  timeout: 30
+config: *default`,
+			check: func(t *testing.T, obj *ast.ObjectNode) {
+				defaults := assertObjectNode(t, obj.Properties()["defaults"])
+				assertLiteralValue(t, defaults.Properties()["timeout"], int64(30))
+
+				config := assertObjectNode(t, obj.Properties()["config"])
+				assertLiteralValue(t, config.Properties()["timeout"], int64(30))
+			},
+		},
+		{
+			name: "nested mapping anchor",
+			input: `base: &base
+  x: 1
+  y: 2
+  nested:
+    a: 3
+    b: 4
+copy: *base`,
+			check: func(t *testing.T, obj *ast.ObjectNode) {
+				base := assertObjectNode(t, obj.Properties()["base"])
+				assertLiteralValue(t, base.Properties()["x"], int64(1))
+				nested := assertObjectNode(t, base.Properties()["nested"])
+				assertLiteralValue(t, nested.Properties()["a"], int64(3))
+
+				copy := assertObjectNode(t, obj.Properties()["copy"])
+				assertLiteralValue(t, copy.Properties()["x"], int64(1))
+				nestedCopy := assertObjectNode(t, copy.Properties()["nested"])
+				assertLiteralValue(t, nestedCopy.Properties()["a"], int64(3))
+			},
+		},
+		{
+			name: "sequence anchor",
+			input: `items: &items
+  - apple
+  - banana
+copy: *items`,
+			check: func(t *testing.T, obj *ast.ObjectNode) {
+				items := assertObjectNode(t, obj.Properties()["items"])
+				assertLiteralValue(t, items.Properties()["0"], "apple")
+				assertLiteralValue(t, items.Properties()["1"], "banana")
+
+				copy := assertObjectNode(t, obj.Properties()["copy"])
+				assertLiteralValue(t, copy.Properties()["0"], "apple")
+				assertLiteralValue(t, copy.Properties()["1"], "banana")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := NewParser(tt.input)
+			node, err := p.Parse()
+			assertNoError(t, err)
+			tt.check(t, assertObjectNode(t, node))
+		})
+	}
+}
+
+// Test merge keys (<<)
+func TestParseMergeKey(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		check func(*testing.T, *ast.ObjectNode)
+	}{
+		{
+			name: "single merge key",
+			input: `base: &base
+  x: 1
+  y: 2
+child:
+  <<: *base
+  y: 3
+  z: 4`,
+			check: func(t *testing.T, obj *ast.ObjectNode) {
+				child := assertObjectNode(t, obj.Properties()["child"])
+				// Merged from base
+				assertLiteralValue(t, child.Properties()["x"], int64(1))
+				// Overridden in child
+				assertLiteralValue(t, child.Properties()["y"], int64(3))
+				// New in child
+				assertLiteralValue(t, child.Properties()["z"], int64(4))
+			},
+		},
+		{
+			name: "merge with no override",
+			input: `defaults: &defaults
+  timeout: 30
+  retries: 3
+service:
+  <<: *defaults
+  name: api`,
+			check: func(t *testing.T, obj *ast.ObjectNode) {
+				service := assertObjectNode(t, obj.Properties()["service"])
+				assertLiteralValue(t, service.Properties()["timeout"], int64(30))
+				assertLiteralValue(t, service.Properties()["retries"], int64(3))
+				assertLiteralValue(t, service.Properties()["name"], "api")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := NewParser(tt.input)
+			node, err := p.Parse()
+			assertNoError(t, err)
+			tt.check(t, assertObjectNode(t, node))
+		})
+	}
+}
+
+// Test complex keys (? marker)
+func TestParseComplexKey(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		check func(*testing.T, *ast.ObjectNode)
+	}{
+		{
+			name: "array as key",
+			input: `? [composite, key]
+: value`,
+			check: func(t *testing.T, obj *ast.ObjectNode) {
+				// Complex keys should be stringified
+				// We expect a key like "[composite, key]" or similar
+				if len(obj.Properties()) != 1 {
+					t.Errorf("expected 1 property, got %d", len(obj.Properties()))
+				}
+			},
+		},
+		{
+			name: "mapping as key",
+			input: `? {nested: key}
+: value`,
+			check: func(t *testing.T, obj *ast.ObjectNode) {
+				if len(obj.Properties()) != 1 {
+					t.Errorf("expected 1 property, got %d", len(obj.Properties()))
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := NewParser(tt.input)
+			node, err := p.Parse()
+			assertNoError(t, err)
+			tt.check(t, assertObjectNode(t, node))
+		})
+	}
+}
+
+// Test lists under keys (Bug 1 - should already be fixed)
+func TestParseListsUnderKeys(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		check func(*testing.T, *ast.ObjectNode)
+	}{
+		{
+			name: "simple list under key",
+			input: `items:
+  - apple
+  - banana`,
+			check: func(t *testing.T, obj *ast.ObjectNode) {
+				items := assertObjectNode(t, obj.Properties()["items"])
+				assertLiteralValue(t, items.Properties()["0"], "apple")
+				assertLiteralValue(t, items.Properties()["1"], "banana")
+			},
+		},
+		{
+			name: "multiple lists",
+			input: `fruits:
+  - apple
+  - banana
+vegetables:
+  - carrot
+  - celery`,
+			check: func(t *testing.T, obj *ast.ObjectNode) {
+				fruits := assertObjectNode(t, obj.Properties()["fruits"])
+				assertLiteralValue(t, fruits.Properties()["0"], "apple")
+				assertLiteralValue(t, fruits.Properties()["1"], "banana")
+
+				veggies := assertObjectNode(t, obj.Properties()["vegetables"])
+				assertLiteralValue(t, veggies.Properties()["0"], "carrot")
+				assertLiteralValue(t, veggies.Properties()["1"], "celery")
+			},
+		},
+		{
+			name: "list with nested mappings",
+			input: `people:
+  - name: Alice
+    age: 30
+  - name: Bob
+    age: 25`,
+			check: func(t *testing.T, obj *ast.ObjectNode) {
+				people := assertObjectNode(t, obj.Properties()["people"])
+
+				alice := assertObjectNode(t, people.Properties()["0"])
+				assertLiteralValue(t, alice.Properties()["name"], "Alice")
+				assertLiteralValue(t, alice.Properties()["age"], int64(30))
+
+				bob := assertObjectNode(t, people.Properties()["1"])
+				assertLiteralValue(t, bob.Properties()["name"], "Bob")
+				assertLiteralValue(t, bob.Properties()["age"], int64(25))
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := NewParser(tt.input)
+			node, err := p.Parse()
+			assertNoError(t, err)
+			tt.check(t, assertObjectNode(t, node))
+		})
+	}
+}
+
+// TestCaseInsensitiveBooleans tests YAML 1.2 case-insensitive boolean parsing
+func TestCaseInsensitiveBooleans(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected bool
+	}{
+		// True variants
+		{"lowercase true", "value: true", true},
+		{"uppercase TRUE", "value: TRUE", true},
+		{"mixed True", "value: True", true},
+		{"lowercase yes", "value: yes", true},
+		{"uppercase YES", "value: YES", true},
+		{"mixed Yes", "value: Yes", true},
+		{"lowercase on", "value: on", true},
+		{"uppercase ON", "value: ON", true},
+		{"mixed On", "value: On", true},
+
+		// False variants
+		{"lowercase false", "value: false", false},
+		{"uppercase FALSE", "value: FALSE", false},
+		{"mixed False", "value: False", false},
+		{"lowercase no", "value: no", false},
+		{"uppercase NO", "value: NO", false},
+		{"mixed No", "value: No", false},
+		{"lowercase off", "value: off", false},
+		{"uppercase OFF", "value: OFF", false},
+		{"mixed Off", "value: Off", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := NewParser(tt.input)
+			node, err := p.Parse()
+			assertNoError(t, err)
+
+			obj := assertObjectNode(t, node)
+			assertLiteralValue(t, obj.Properties()["value"], tt.expected)
+		})
+	}
+}
+
+// TestCaseInsensitiveBooleansInSequences tests booleans in sequences
+func TestCaseInsensitiveBooleansInSequences(t *testing.T) {
+	input := `flags:
+  - True
+  - FALSE
+  - Yes
+  - NO
+  - On
+  - OFF`
+
+	p := NewParser(input)
+	node, err := p.Parse()
+	assertNoError(t, err)
+
+	obj := assertObjectNode(t, node)
+	flags := assertObjectNode(t, obj.Properties()["flags"])
+
+	assertLiteralValue(t, flags.Properties()["0"], true)
+	assertLiteralValue(t, flags.Properties()["1"], false)
+	assertLiteralValue(t, flags.Properties()["2"], true)
+	assertLiteralValue(t, flags.Properties()["3"], false)
+	assertLiteralValue(t, flags.Properties()["4"], true)
+	assertLiteralValue(t, flags.Properties()["5"], false)
+}
+

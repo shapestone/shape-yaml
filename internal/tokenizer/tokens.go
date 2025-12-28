@@ -36,5 +36,6 @@ const (
 	TokenBlockFolded  = "BlockFolded"  // > (folded block)
 	TokenQuestion    = "Question"    // ? (complex key marker)
 	TokenMergeKey    = "MergeKey"    // <<
+	TokenDirective   = "Directive"   // %YAML or %TAG directive
 	TokenEOF         = "EOF"         // End of file
 )

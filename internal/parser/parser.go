@@ -15,12 +15,14 @@ import (
 // Parser implements LL(1) recursive descent parsing for YAML.
 // It maintains a single token lookahead for predictive parsing.
 type Parser struct {
-	tokenizer *tokenizer.IndentationTokenizer
-	current   *shapetokenizer.Token
-	next      *shapetokenizer.Token // Two-token lookahead for disambiguating mappings vs scalars
-	hasToken  bool
-	hasNext   bool
-	anchors   map[string]ast.SchemaNode // Store &name anchors for later alias resolution
+	tokenizer   *tokenizer.IndentationTokenizer
+	current     *shapetokenizer.Token
+	next        *shapetokenizer.Token              // Two-token lookahead for disambiguating mappings vs scalars
+	hasToken    bool
+	hasNext     bool
+	anchors     map[string]ast.SchemaNode          // Store &name anchors for later alias resolution
+	yamlVersion string                             // YAML version from %YAML directive
+	tagHandles  map[string]string                  // Tag handle mappings from %TAG directives
 }
 
 // NewParser creates a new YAML parser for the given input string.
@@ -49,6 +51,9 @@ func newParserWithStream(stream shapetokenizer.Stream) *Parser {
 		anchors:   make(map[string]ast.SchemaNode),
 	}
 
+	// Initialize directives to defaults
+	p.resetDirectives()
+
 	// Initialize with two tokens for lookahead
 	token, ok := indented.NextToken()
 	if ok {
@@ -74,8 +79,19 @@ func newParserWithStream(stream shapetokenizer.Stream) *Parser {
 // Returns ast.SchemaNode - the root of the AST.
 // For YAML data, this will be ObjectNode (for mappings and sequences) or LiteralNode (for scalars).
 func (p *Parser) Parse() (ast.SchemaNode, error) {
+	// Parse directives at the beginning of the document
+	if err := p.parseDirectives(); err != nil {
+		return nil, err
+	}
+
 	// Skip leading newlines/comments
 	p.skipWhitespaceAndComments()
+
+	// Skip document separator (---) and document end (...) if present
+	for p.peek() != nil && (p.peek().Kind() == tokenizer.TokenDocSep || p.peek().Kind() == tokenizer.TokenDocEnd) {
+		p.advance()
+		p.skipWhitespaceAndComments()
+	}
 
 	// Check for empty document
 	if p.peek() == nil || !p.hasToken {
@@ -91,6 +107,11 @@ func (p *Parser) Parse() (ast.SchemaNode, error) {
 
 	// Skip trailing newlines/comments
 	p.skipWhitespaceAndComments()
+
+	// Consume any remaining DEDENT tokens (these are emitted when nested structures end)
+	for p.peek() != nil && p.peek().Kind() == tokenizer.TokenDedent {
+		p.advance()
+	}
 
 	// After parsing the value, we should be at EOF
 	// peek() skips whitespace, so if we have a non-nil token after peek, it's extra content
@@ -146,6 +167,26 @@ func (p *Parser) parseNode() (ast.SchemaNode, error) {
 		// Alias reference: *name
 		return p.parseAlias()
 
+	case tokenizer.TokenTag:
+		// Tagged node: !!type value or !CustomType value
+		return p.parseTaggedNode()
+
+	case tokenizer.TokenBlockLiteral:
+		// Literal scalar: |
+		return p.parseLiteralScalar()
+
+	case tokenizer.TokenBlockFolded:
+		// Folded scalar: >
+		return p.parseFoldedScalar()
+
+	case tokenizer.TokenQuestion:
+		// Complex key: ? <key>
+		return p.parseComplexMapping()
+
+	case tokenizer.TokenMergeKey:
+		// Merge key: << - this starts a block mapping
+		return p.parseBlockMapping()
+
 	default:
 		return nil, fmt.Errorf("expected YAML value at %s, got %s",
 			p.positionStr(), token.Kind())
@@ -189,6 +230,12 @@ func (p *Parser) parseBlockMapping() (*ast.ObjectNode, error) {
 	// Pre-size with reasonable capacity to avoid initial resizing
 	properties := make(map[string]ast.SchemaNode, 8)
 
+	// Track INDENT tokens consumed so we can balance with DEDENT
+	indentDepth := 0
+
+	// Collect merge key values to apply at the end
+	var mergeNodes []ast.SchemaNode
+
 	// Must have at least one entry
 	for {
 		// Check if we're still in the mapping
@@ -205,6 +252,40 @@ func (p *Parser) parseBlockMapping() (*ast.ObjectNode, error) {
 		// Skip newlines
 		if token.Kind() == tokenizer.TokenNewline {
 			p.advance()
+			continue
+		}
+
+		// Skip INDENT tokens (can appear when a mapping continues on the next line)
+		// Track the depth so we can consume matching DEDENTs later
+		if token.Kind() == tokenizer.TokenIndent {
+			p.advance()
+			indentDepth++
+			continue
+		}
+
+		// Check for merge key (<<)
+		if token.Kind() == tokenizer.TokenMergeKey {
+			p.advance() // consume <<
+
+			// Expect colon
+			if p.peek() == nil || p.peek().Kind() != tokenizer.TokenColon {
+				return nil, fmt.Errorf("expected ':' after merge key '<<' at %s", p.positionStr())
+			}
+			p.advance() // consume colon
+
+			// Parse alias value
+			aliasNode, err := p.parseNode()
+			if err != nil {
+				return nil, fmt.Errorf("in merge key value: %w", err)
+			}
+
+			// Store merge node to apply later (after parsing all explicit properties)
+			mergeNodes = append(mergeNodes, aliasNode)
+
+			// Consume optional newline
+			if p.peek() != nil && p.peek().Kind() == tokenizer.TokenNewline {
+				p.advance()
+			}
 			continue
 		}
 
@@ -258,22 +339,51 @@ func (p *Parser) parseBlockMapping() (*ast.ObjectNode, error) {
 			}
 		} else {
 			// Inline value (same line as key)
-			value, err := p.parseNode()
-			if err != nil {
-				return nil, fmt.Errorf("in value for key %q: %w", key, err)
-			}
+			// Check if we're at EOF (empty value)
+			if p.peek() == nil || !p.hasToken {
+				// Empty value at EOF - treat as null
+				if _, exists := properties[key]; exists {
+					return nil, fmt.Errorf("duplicate key %q at %s", key, p.positionStr())
+				}
+				properties[key] = ast.NewLiteralNode(nil, p.position())
+			} else {
+				value, err := p.parseNode()
+				if err != nil {
+					return nil, fmt.Errorf("in value for key %q: %w", key, err)
+				}
 
-			// Check for duplicate keys
-			if _, exists := properties[key]; exists {
-				return nil, fmt.Errorf("duplicate key %q at %s", key, p.positionStr())
-			}
-			properties[key] = value
+				// Check for duplicate keys
+				if _, exists := properties[key]; exists {
+					return nil, fmt.Errorf("duplicate key %q at %s", key, p.positionStr())
+				}
+				properties[key] = value
 
-			// Consume optional newline
-			if p.peek() != nil && p.peek().Kind() == tokenizer.TokenNewline {
-				p.advance()
+				// Consume optional newline
+				if p.peek() != nil && p.peek().Kind() == tokenizer.TokenNewline {
+					p.advance()
+				}
 			}
 		}
+	}
+
+	// Consume matching DEDENT tokens for any INDENT tokens we consumed
+	for indentDepth > 0 && p.peek() != nil && p.peek().Kind() == tokenizer.TokenDedent {
+		p.advance()
+		indentDepth--
+	}
+
+	// Apply merge keys: properties from merge nodes that don't exist in properties
+	// Process merge nodes in order (first merge has lowest priority)
+	for _, mergeNode := range mergeNodes {
+		if aliasObj, ok := mergeNode.(*ast.ObjectNode); ok {
+			for k, v := range aliasObj.Properties() {
+				// Don't override existing properties (explicit properties win)
+				if _, exists := properties[k]; !exists {
+					properties[k] = v
+				}
+			}
+		}
+		// Silently ignore non-mapping merge values (could add error handling)
 	}
 
 	return ast.NewObjectNode(properties, startPos), nil
@@ -503,10 +613,29 @@ func (p *Parser) parseAnchoredNode() (ast.SchemaNode, error) {
 	// Extract anchor name (remove leading &)
 	anchorName := strings.TrimPrefix(anchorToken.ValueString(), "&")
 
+	// Skip whitespace/newlines after anchor
+	// Anchored values can be on the same line or next line (indented)
+	if p.peek() != nil && p.peek().Kind() == tokenizer.TokenNewline {
+		p.advance() // consume newline
+
+		// Skip additional whitespace/comments
+		p.skipWhitespaceAndComments()
+
+		// If there's an INDENT, consume it - the value is nested
+		if p.peek() != nil && p.peek().Kind() == tokenizer.TokenIndent {
+			p.advance() // consume INDENT
+		}
+	}
+
 	// Parse the value
 	value, err := p.parseNode()
 	if err != nil {
 		return nil, fmt.Errorf("in anchored node &%s: %w", anchorName, err)
+	}
+
+	// Consume trailing DEDENT if present (from nested value)
+	if p.peek() != nil && p.peek().Kind() == tokenizer.TokenDedent {
+		p.advance()
 	}
 
 	// Store in anchors map
@@ -684,6 +813,15 @@ func (p *Parser) peek() *shapetokenizer.Token {
 	return p.current
 }
 
+// peekRaw returns current token without advancing or skipping whitespace.
+// Use this when you need to preserve whitespace (e.g., in block scalars).
+func (p *Parser) peekRaw() *shapetokenizer.Token {
+	if !p.hasToken {
+		return nil
+	}
+	return p.current
+}
+
 // advance moves to next token (with two-token lookahead).
 func (p *Parser) advance() {
 	// Shift: next becomes current
@@ -821,8 +959,25 @@ func (p *Parser) unescapeDoubleQuoted(s string) string {
 			buf.WriteByte('\t')
 		case '0':
 			buf.WriteByte('\x00')
+		// Advanced YAML 1.2 escape sequences
+		case 'a':
+			buf.WriteByte('\a') // bell (0x07)
+		case 'v':
+			buf.WriteByte('\v') // vertical tab (0x0B)
+		case 'e':
+			buf.WriteByte('\x1b') // escape (0x1B)
+		case ' ':
+			buf.WriteByte(' ') // escaped space (0x20)
+		case 'N':
+			buf.WriteRune('\u0085') // next line (NEL)
+		case '_':
+			buf.WriteRune('\u00a0') // non-breaking space (NBSP)
+		case 'L':
+			buf.WriteRune('\u2028') // line separator
+		case 'P':
+			buf.WriteRune('\u2029') // paragraph separator
 		case 'u':
-			// Handle \uXXXX unicode escape
+			// Handle \uXXXX unicode escape (4 hex digits)
 			if i+4 < len(s) {
 				// Parse 4 hex digits
 				hex := s[i+1 : i+5]
@@ -836,6 +991,22 @@ func (p *Parser) unescapeDoubleQuoted(s string) string {
 			} else {
 				// Not enough characters for \uXXXX
 				buf.WriteString("\\u")
+			}
+		case 'U':
+			// Handle \UXXXXXXXX unicode escape (8 hex digits)
+			if i+8 < len(s) {
+				// Parse 8 hex digits
+				hex := s[i+1 : i+9]
+				if codepoint, err := parseHex8(hex); err == nil {
+					buf.WriteRune(rune(codepoint))
+					i += 8 // Skip the 8 hex digits
+				} else {
+					// Invalid hex, write as-is
+					buf.WriteString("\\U")
+				}
+			} else {
+				// Not enough characters for \UXXXXXXXX
+				buf.WriteString("\\U")
 			}
 		default:
 			// Unknown escape sequence, preserve it
@@ -873,4 +1044,418 @@ func parseHex(s string) (int, error) {
 	}
 
 	return result, nil
+}
+
+// parseHex8 converts an 8-character hex string to an integer (for \UXXXXXXXX).
+func parseHex8(s string) (int, error) {
+	if len(s) != 8 {
+		return 0, fmt.Errorf("hex string must be 8 characters")
+	}
+
+	var result int
+	for i := 0; i < 8; i++ {
+		c := s[i]
+		var digit int
+
+		switch {
+		case c >= '0' && c <= '9':
+			digit = int(c - '0')
+		case c >= 'a' && c <= 'f':
+			digit = int(c - 'a' + 10)
+		case c >= 'A' && c <= 'F':
+			digit = int(c - 'A' + 10)
+		default:
+			return 0, fmt.Errorf("invalid hex character: %c", c)
+		}
+
+		result = result*16 + digit
+	}
+
+	return result, nil
+}
+
+// parseLiteralScalar parses a YAML literal scalar (|).
+//
+// Grammar (docs/grammar/yaml-1.2.ebnf line 168):
+//
+//	LiteralScalar = "|" [ BlockChompIndicator ] Newline BlockContent ;
+//	BlockChompIndicator = "-" | "+" ;
+//	BlockContent = { [ Indent ] TextLine Newline } ;
+//
+// Returns *ast.LiteralNode with string value preserving newlines.
+// Example:
+//
+//	description: |
+//	  Line 1
+//	  Line 2
+//
+// Returns: LiteralNode("Line 1\nLine 2\n", position)
+func (p *Parser) parseLiteralScalar() (*ast.LiteralNode, error) {
+	if p.peek().Kind() != tokenizer.TokenBlockLiteral {
+		return nil, fmt.Errorf("expected '|' at %s", p.positionStr())
+	}
+
+	pos := p.position()
+	p.advance() // consume |
+
+	// Check for chomping indicator (-/+)
+	chompMode := "clip" // default
+	if p.peek() != nil && p.peek().Kind() == tokenizer.TokenDash {
+		chompMode = "strip"
+		p.advance() // consume -
+	} else if p.peek() != nil && p.peek().Kind() == tokenizer.TokenString && p.current.ValueString() == "+" {
+		chompMode = "keep"
+		p.advance() // consume +
+	}
+
+	// Skip whitespace before newline
+	for p.peek() != nil && p.peek().Kind() == "Whitespace" {
+		p.advance()
+	}
+
+	// Expect newline
+	if p.peek() == nil || p.peek().Kind() != tokenizer.TokenNewline {
+		return nil, fmt.Errorf("expected newline after '|' at %s", p.positionStr())
+	}
+	p.advance() // consume newline
+
+	// Skip whitespace/comments but not INDENT
+	for p.hasToken && p.current != nil && p.current.Kind() == tokenizer.TokenComment {
+		p.advance()
+	}
+
+	// Check for INDENT - if not present, empty literal
+	if p.peek() == nil || p.peek().Kind() != tokenizer.TokenIndent {
+		return ast.NewLiteralNode("", pos), nil
+	}
+	p.advance() // consume INDENT
+
+	// Collect indented lines
+	var lines []string
+
+	for {
+		token := p.peek()
+		if token == nil || !p.hasToken {
+			break
+		}
+
+		// DEDENT means end of literal block
+		if token.Kind() == tokenizer.TokenDedent {
+			p.advance()
+			break
+		}
+
+		// Handle newlines (empty lines)
+		if token.Kind() == tokenizer.TokenNewline {
+			lines = append(lines, "")
+			p.advance()
+			continue
+		}
+
+		// Collect all tokens on this line until newline or DEDENT
+		var lineParts []string
+		skipFirstWhitespace := true
+		for {
+			token := p.peekRaw()  // Use peekRaw() to not skip whitespace
+			if token == nil || token.Kind() == tokenizer.TokenNewline || token.Kind() == tokenizer.TokenDedent {
+				break
+			}
+
+			// Skip leading whitespace on first token only
+			if skipFirstWhitespace && token.Kind() == "Whitespace" {
+				p.advance()
+				skipFirstWhitespace = false
+				continue
+			}
+			skipFirstWhitespace = false
+
+			// Handle whitespace between tokens - preserve it
+			if token.Kind() == "Whitespace" {
+				lineParts = append(lineParts, " ")
+			} else {
+				// Add token value
+				lineParts = append(lineParts, token.ValueString())
+			}
+			p.advance()
+		}
+
+		// Add line if not empty
+		if len(lineParts) > 0 {
+			// Remove trailing whitespace
+			line := strings.Join(lineParts, "")
+			line = strings.TrimRight(line, " ")
+			lines = append(lines, line)
+		}
+
+		// Consume newline if present
+		if p.peek() != nil && p.peek().Kind() == tokenizer.TokenNewline {
+			p.advance()
+		}
+	}
+
+	// Apply chomping mode
+	content := strings.Join(lines, "\n")
+	switch chompMode {
+	case "strip":
+		// Remove all trailing newlines
+		content = strings.TrimRight(content, "\n")
+	case "keep":
+		// Keep all trailing newlines (already in content)
+		content = content + "\n"
+	case "clip":
+		// Single trailing newline
+		content = strings.TrimRight(content, "\n") + "\n"
+	}
+
+	return ast.NewLiteralNode(content, pos), nil
+}
+
+// parseFoldedScalar parses a YAML folded scalar (>).
+//
+// Grammar (docs/grammar/yaml-1.2.ebnf line 178):
+//
+//	FoldedScalar = ">" [ BlockChompIndicator ] Newline BlockContent ;
+//
+// Returns *ast.LiteralNode with string value where newlines are folded to spaces.
+// Example:
+//
+//	summary: >
+//	  This is a long
+//	  paragraph that spans
+//	  multiple lines.
+//
+// Returns: LiteralNode("This is a long paragraph that spans multiple lines.\n", position)
+func (p *Parser) parseFoldedScalar() (*ast.LiteralNode, error) {
+	if p.peek().Kind() != tokenizer.TokenBlockFolded {
+		return nil, fmt.Errorf("expected '>' at %s", p.positionStr())
+	}
+
+	pos := p.position()
+	p.advance() // consume >
+
+	// Check for chomping indicator (-/+)
+	chompMode := "clip" // default
+	if p.peek() != nil && p.peek().Kind() == tokenizer.TokenDash {
+		chompMode = "strip"
+		p.advance() // consume -
+	} else if p.peek() != nil && p.peek().Kind() == tokenizer.TokenString && p.current.ValueString() == "+" {
+		chompMode = "keep"
+		p.advance() // consume +
+	}
+
+	// Skip whitespace before newline
+	for p.peek() != nil && p.peek().Kind() == "Whitespace" {
+		p.advance()
+	}
+
+	// Expect newline
+	if p.peek() == nil || p.peek().Kind() != tokenizer.TokenNewline {
+		return nil, fmt.Errorf("expected newline after '>' at %s", p.positionStr())
+	}
+	p.advance() // consume newline
+
+	// Skip whitespace/comments but not INDENT
+	for p.hasToken && p.current != nil && p.current.Kind() == tokenizer.TokenComment {
+		p.advance()
+	}
+
+	// Check for INDENT - if not present, empty folded
+	if p.peek() == nil || p.peek().Kind() != tokenizer.TokenIndent {
+		return ast.NewLiteralNode("", pos), nil
+	}
+	p.advance() // consume INDENT
+
+	// Collect indented lines
+	var lines []string
+
+	for {
+		token := p.peek()
+		if token == nil || !p.hasToken {
+			break
+		}
+
+		// DEDENT means end of folded block
+		if token.Kind() == tokenizer.TokenDedent {
+			p.advance()
+			break
+		}
+
+		// Handle newlines (blank lines separate paragraphs)
+		if token.Kind() == tokenizer.TokenNewline {
+			lines = append(lines, "") // blank line
+			p.advance()
+			continue
+		}
+
+		// Collect all tokens on this line until newline or DEDENT
+		var lineParts []string
+		skipFirstWhitespace := true
+		for {
+			token := p.peekRaw()  // Use peekRaw() to not skip whitespace
+			if token == nil || token.Kind() == tokenizer.TokenNewline || token.Kind() == tokenizer.TokenDedent {
+				break
+			}
+
+			// Skip leading whitespace on first token only
+			if skipFirstWhitespace && token.Kind() == "Whitespace" {
+				p.advance()
+				skipFirstWhitespace = false
+				continue
+			}
+			skipFirstWhitespace = false
+
+			// Handle whitespace between tokens - preserve it
+			if token.Kind() == "Whitespace" {
+				lineParts = append(lineParts, " ")
+			} else {
+				// Add token value
+				lineParts = append(lineParts, token.ValueString())
+			}
+			p.advance()
+		}
+
+		// Add line if not empty
+		if len(lineParts) > 0 {
+			// Remove trailing whitespace
+			line := strings.Join(lineParts, "")
+			line = strings.TrimRight(line, " ")
+			lines = append(lines, line)
+		}
+
+		// Consume newline if present
+		if p.peek() != nil && p.peek().Kind() == tokenizer.TokenNewline {
+			p.advance()
+		}
+	}
+
+	// Fold lines: convert newlines to spaces, but preserve blank lines
+	var paragraphs []string
+	var currentParagraph []string
+
+	for _, line := range lines {
+		if line == "" {
+			// Blank line - end current paragraph
+			if len(currentParagraph) > 0 {
+				paragraphs = append(paragraphs, strings.Join(currentParagraph, " "))
+				currentParagraph = nil
+			}
+			paragraphs = append(paragraphs, "") // preserve blank line
+		} else {
+			currentParagraph = append(currentParagraph, line)
+		}
+	}
+
+	// Add final paragraph if any
+	if len(currentParagraph) > 0 {
+		paragraphs = append(paragraphs, strings.Join(currentParagraph, " "))
+	}
+
+	// Join paragraphs with newlines
+	content := strings.Join(paragraphs, "\n")
+
+	// Remove consecutive blank lines
+	for strings.Contains(content, "\n\n\n") {
+		content = strings.ReplaceAll(content, "\n\n\n", "\n\n")
+	}
+
+	// Apply chomping mode
+	switch chompMode {
+	case "strip":
+		// Remove all trailing newlines
+		content = strings.TrimRight(content, "\n")
+	case "keep":
+		// Keep all trailing newlines (already in content)
+		content = content + "\n"
+	case "clip":
+		// Single trailing newline
+		content = strings.TrimRight(content, "\n") + "\n"
+	}
+
+	return ast.NewLiteralNode(content, pos), nil
+}
+
+// parseComplexMapping parses a mapping with complex keys (? marker).
+//
+// Grammar (docs/grammar/yaml-1.2.ebnf line 97):
+//
+//	ComplexKey = "?" " " Node ;
+//
+// Example:
+//
+//	? [composite, key]
+//	: value
+//
+// Returns *ast.ObjectNode with the complex key stringified.
+func (p *Parser) parseComplexMapping() (*ast.ObjectNode, error) {
+	startPos := p.position()
+	properties := make(map[string]ast.SchemaNode, 8)
+
+	for {
+		token := p.peek()
+		if token == nil || !p.hasToken {
+			break
+		}
+
+		// DEDENT or non-? means we're done
+		if token.Kind() == tokenizer.TokenDedent || token.Kind() != tokenizer.TokenQuestion {
+			break
+		}
+
+		// Consume ?
+		p.advance()
+
+		// Skip whitespace
+		p.skipWhitespaceAndComments()
+
+		// Parse key node
+		keyNode, err := p.parseNode()
+		if err != nil {
+			return nil, fmt.Errorf("in complex key: %w", err)
+		}
+
+		// Convert key node to string
+		key := stringifyNode(keyNode)
+
+		// Expect newline or colon
+		p.skipWhitespaceAndComments()
+
+		// Expect :
+		if p.peek() == nil || p.peek().Kind() != tokenizer.TokenColon {
+			return nil, fmt.Errorf("expected ':' after complex key at %s", p.positionStr())
+		}
+		p.advance() // consume :
+
+		// Skip whitespace
+		p.skipWhitespaceAndComments()
+
+		// Parse value
+		value, err := p.parseNode()
+		if err != nil {
+			return nil, fmt.Errorf("in value for complex key: %w", err)
+		}
+
+		properties[key] = value
+
+		// Skip trailing whitespace
+		p.skipWhitespaceAndComments()
+	}
+
+	return ast.NewObjectNode(properties, startPos), nil
+}
+
+// stringifyNode converts an AST node to a string representation for use as a key.
+func stringifyNode(node ast.SchemaNode) string {
+	switch n := node.(type) {
+	case *ast.LiteralNode:
+		return fmt.Sprintf("%v", n.Value())
+	case *ast.ObjectNode:
+		// Stringify object - could use JSON-like format
+		parts := []string{}
+		for k, v := range n.Properties() {
+			parts = append(parts, fmt.Sprintf("%s: %s", k, stringifyNode(v)))
+		}
+		return "{" + strings.Join(parts, ", ") + "}"
+	default:
+		return fmt.Sprintf("%v", node)
+	}
 }

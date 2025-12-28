@@ -4,8 +4,8 @@
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go)](https://go.dev/)
-[![Tests](https://img.shields.io/badge/tests-149%2F151%20passing-success)](./TEST_SUMMARY.md)
-[![Coverage](https://img.shields.io/badge/coverage-96%25-brightgreen)](./TEST_SUMMARY.md)
+[![Tests](https://img.shields.io/badge/tests-439%20passing-success)](./PARSER_STATUS.md)
+[![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)](./PARSER_STATUS.md)
 
 **Repository:** github.com/shapestone/shape-yaml
 

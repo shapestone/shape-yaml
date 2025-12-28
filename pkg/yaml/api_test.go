@@ -7,6 +7,141 @@ import (
 	"github.com/shapestone/shape-core/pkg/ast"
 )
 
+// TestParseMultiDoc verifies the ParseMultiDoc function
+func TestParseMultiDoc(t *testing.T) {
+	yamlStream := `---
+name: doc1
+type: ConfigMap
+---
+name: doc2
+type: Service`
+
+	docs, err := ParseMultiDoc(yamlStream)
+	if err != nil {
+		t.Fatalf("ParseMultiDoc() error: %v", err)
+	}
+
+	if len(docs) != 2 {
+		t.Fatalf("ParseMultiDoc() returned %d documents, want 2", len(docs))
+	}
+
+	// Verify first document
+	doc1, ok := docs[0].(*ast.ObjectNode)
+	if !ok {
+		t.Fatalf("Document 0 is %T, want *ast.ObjectNode", docs[0])
+	}
+
+	nameNode1, ok := doc1.GetProperty("name")
+	if !ok {
+		t.Fatal("Document 0 missing 'name' property")
+	}
+
+	nameLit1, ok := nameNode1.(*ast.LiteralNode)
+	if !ok || nameLit1.Value() != "doc1" {
+		t.Errorf("Document 0 name = %v, want doc1", nameLit1.Value())
+	}
+
+	// Verify second document
+	doc2, ok := docs[1].(*ast.ObjectNode)
+	if !ok {
+		t.Fatalf("Document 1 is %T, want *ast.ObjectNode", docs[1])
+	}
+
+	nameNode2, ok := doc2.GetProperty("name")
+	if !ok {
+		t.Fatal("Document 1 missing 'name' property")
+	}
+
+	nameLit2, ok := nameNode2.(*ast.LiteralNode)
+	if !ok || nameLit2.Value() != "doc2" {
+		t.Errorf("Document 1 name = %v, want doc2", nameLit2.Value())
+	}
+}
+
+// TestParseMultiDocReader verifies the ParseMultiDocReader function
+func TestParseMultiDocReader(t *testing.T) {
+	yamlStream := `---
+id: 1
+---
+id: 2
+---
+id: 3`
+
+	reader := strings.NewReader(yamlStream)
+	docs, err := ParseMultiDocReader(reader)
+	if err != nil {
+		t.Fatalf("ParseMultiDocReader() error: %v", err)
+	}
+
+	if len(docs) != 3 {
+		t.Fatalf("ParseMultiDocReader() returned %d documents, want 3", len(docs))
+	}
+
+	// Verify each document has the correct id
+	for i := 0; i < 3; i++ {
+		doc, ok := docs[i].(*ast.ObjectNode)
+		if !ok {
+			t.Fatalf("Document %d is %T, want *ast.ObjectNode", i, docs[i])
+		}
+
+		idNode, ok := doc.GetProperty("id")
+		if !ok {
+			t.Fatalf("Document %d missing 'id' property", i)
+		}
+
+		idLit, ok := idNode.(*ast.LiteralNode)
+		if !ok {
+			t.Fatalf("Document %d id is %T, want *ast.LiteralNode", i, idNode)
+		}
+
+		expected := int64(i + 1)
+		if idLit.Value() != expected {
+			t.Errorf("Document %d id = %v, want %d", i, idLit.Value(), expected)
+		}
+	}
+}
+
+// TestParseMultiDocEmpty verifies empty stream handling
+func TestParseMultiDocEmpty(t *testing.T) {
+	docs, err := ParseMultiDoc("")
+	if err != nil {
+		t.Fatalf("ParseMultiDoc(\"\") error: %v", err)
+	}
+
+	if len(docs) != 0 {
+		t.Fatalf("ParseMultiDoc(\"\") returned %d documents, want 0", len(docs))
+	}
+}
+
+// TestParseMultiDocSingle verifies single document handling
+func TestParseMultiDocSingle(t *testing.T) {
+	yamlStr := `name: single`
+
+	docs, err := ParseMultiDoc(yamlStr)
+	if err != nil {
+		t.Fatalf("ParseMultiDoc() error: %v", err)
+	}
+
+	if len(docs) != 1 {
+		t.Fatalf("ParseMultiDoc() returned %d documents, want 1", len(docs))
+	}
+
+	doc, ok := docs[0].(*ast.ObjectNode)
+	if !ok {
+		t.Fatalf("Document is %T, want *ast.ObjectNode", docs[0])
+	}
+
+	nameNode, ok := doc.GetProperty("name")
+	if !ok {
+		t.Fatal("Document missing 'name' property")
+	}
+
+	nameLit, ok := nameNode.(*ast.LiteralNode)
+	if !ok || nameLit.Value() != "single" {
+		t.Errorf("name = %v, want single", nameLit.Value())
+	}
+}
+
 // TestParse verifies the Parse function
 func TestParse(t *testing.T) {
 	yamlStr := `name: Alice

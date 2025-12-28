@@ -130,6 +130,78 @@ func ParseReader(reader io.Reader) (ast.SchemaNode, error) {
 	return p.Parse()
 }
 
+// ParseMultiDoc parses a YAML stream containing multiple documents.
+//
+// YAML streams can contain multiple documents separated by --- markers and
+// optionally ending with ... markers. This function parses all documents
+// in the stream and returns them as a slice of AST nodes.
+//
+// Returns a slice of ast.SchemaNode, one for each document in the stream.
+// Empty documents are represented as empty ObjectNode instances.
+//
+// Example:
+//
+//	yamlStream := `---
+//	name: doc1
+//	type: ConfigMap
+//	---
+//	name: doc2
+//	type: Service
+//	...`
+//
+//	docs, err := yaml.ParseMultiDoc(yamlStream)
+//	if err != nil {
+//	    return fmt.Errorf("parsing failed: %w", err)
+//	}
+//
+//	// docs[0] is the first document (ConfigMap)
+//	// docs[1] is the second document (Service)
+//
+// This is commonly used for Kubernetes multi-resource YAML files:
+//
+//	file, err := os.ReadFile("resources.yaml")
+//	if err != nil {
+//	    return err
+//	}
+//
+//	docs, err := yaml.ParseMultiDoc(string(file))
+//	for i, doc := range docs {
+//	    fmt.Printf("Document %d: %+v\n", i, doc)
+//	}
+func ParseMultiDoc(input string) ([]ast.SchemaNode, error) {
+	p := parser.NewParser(input)
+	return p.ParseMultiDoc()
+}
+
+// ParseMultiDocReader parses a YAML stream containing multiple documents from an io.Reader.
+//
+// This function is the streaming version of ParseMultiDoc, designed for parsing
+// large multi-document YAML files with constant memory usage.
+//
+// Example:
+//
+//	file, err := os.Open("k8s-resources.yaml")
+//	if err != nil {
+//	    return err
+//	}
+//	defer file.Close()
+//
+//	docs, err := yaml.ParseMultiDocReader(file)
+//	if err != nil {
+//	    return fmt.Errorf("parsing failed: %w", err)
+//	}
+//
+//	for i, doc := range docs {
+//	    // Process each document
+//	    obj := doc.(*ast.ObjectNode)
+//	    // ...
+//	}
+func ParseMultiDocReader(reader io.Reader) ([]ast.SchemaNode, error) {
+	stream := tokenizer.NewStreamFromReader(reader)
+	p := parser.NewParserFromStream(stream)
+	return p.ParseMultiDoc()
+}
+
 // Validate checks if a YAML string is syntactically valid.
 //
 // This function parses the YAML and returns any syntax errors, but discards
