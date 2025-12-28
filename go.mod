@@ -1,6 +1,6 @@
 module github.com/shapestone/shape-yaml
 
-go 1.25
+go 1.23
 
 require (
 	github.com/shapestone/shape-core v0.9.2
