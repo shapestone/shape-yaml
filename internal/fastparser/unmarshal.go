@@ -829,6 +829,18 @@ func (p *Parser) setScalarValue(rv reflect.Value, val interface{}) error {
 			}
 			rv.SetInt(v)
 			return nil
+		case uint64:
+			// Allow uint64 values that fit in int64 range
+			const maxInt64 = int64(^uint64(0) >> 1) // 9223372036854775807
+			if v > uint64(maxInt64) {
+				return fmt.Errorf("yaml: value %d overflows %s", v, rv.Type())
+			}
+			i := int64(v)
+			if rv.OverflowInt(i) {
+				return fmt.Errorf("yaml: value %d overflows %s", v, rv.Type())
+			}
+			rv.SetInt(i)
+			return nil
 		case float64:
 			i := int64(v)
 			if rv.OverflowInt(i) {
@@ -849,6 +861,12 @@ func (p *Parser) setScalarValue(rv reflect.Value, val interface{}) error {
 			}
 			rv.SetUint(uint64(v))
 			return nil
+		case uint64:
+			if rv.OverflowUint(v) {
+				return fmt.Errorf("yaml: value %d overflows %s", v, rv.Type())
+			}
+			rv.SetUint(v)
+			return nil
 		case float64:
 			u := uint64(v)
 			if rv.OverflowUint(u) {
@@ -868,6 +886,13 @@ func (p *Parser) setScalarValue(rv reflect.Value, val interface{}) error {
 			rv.SetFloat(v)
 			return nil
 		case int64:
+			f := float64(v)
+			if rv.OverflowFloat(f) {
+				return fmt.Errorf("yaml: value %v overflows %s", v, rv.Type())
+			}
+			rv.SetFloat(f)
+			return nil
+		case uint64:
 			f := float64(v)
 			if rv.OverflowFloat(f) {
 				return fmt.Errorf("yaml: value %v overflows %s", v, rv.Type())

@@ -676,9 +676,13 @@ func (p *Parser) interpretScalar(b []byte) interface{} {
 		return false
 	}
 
-	// Try integer
+	// Try integer - first try signed int64
 	if i, err := strconv.ParseInt(s, 10, 64); err == nil {
 		return i
+	}
+	// If ParseInt failed, try unsigned uint64 for large positive numbers
+	if u, err := strconv.ParseUint(s, 10, 64); err == nil {
+		return u
 	}
 
 	// Try hex integer
