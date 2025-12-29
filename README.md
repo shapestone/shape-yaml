@@ -15,7 +15,7 @@
 
 **Repository:** github.com/shapestone/shape-yaml
 
-A production-ready YAML 1.2 parser with dual-path architecture for the Shape Parser™ ecosystem.
+A production-ready YAML 1.2 parser for the [Shape Parser™](https://github.com/shapestone/shape) ecosystem.
 
 Parses YAML data (YAML 1.2 spec) into Shape Parser's™ unified AST representation with automatic fast-path optimization.
 
