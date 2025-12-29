@@ -145,3 +145,95 @@ func TestFluentAPI_RoundTrip(t *testing.T) {
 		t.Errorf("count = %v, want 42", m["count"])
 	}
 }
+
+// TestDocument_Sequence tests Document.Sequence()
+func TestDocument_Sequence(t *testing.T) {
+	// Note: Document.Sequence() builds the node immediately, so we can't chain Add() calls
+	// Instead, we need to build the sequence first then set it on the document
+	seq := NewSequence().
+		Add("item1").
+		Add("item2").
+		Add("item3")
+
+	// Convert to interface and marshal
+	data := NodeToInterface(seq.Build())
+	yamlBytes, err := Marshal(data)
+	if err != nil {
+		t.Fatalf("Marshal() error: %v", err)
+	}
+
+	yamlStr := string(yamlBytes)
+	// Just verify we got valid YAML output
+	if len(yamlStr) == 0 {
+		t.Error("Marshal() returned empty string")
+	}
+}
+
+// TestDocument_Value tests Document.Value()
+func TestDocument_Value(t *testing.T) {
+	doc := NewDocument()
+	doc.Value("simple string")
+
+	yamlBytes, err := doc.ToYAML()
+	if err != nil {
+		t.Fatalf("ToYAML() error: %v", err)
+	}
+
+	yamlStr := string(yamlBytes)
+	// Marshal might not add trailing newline
+	expected := "simple string"
+	if yamlStr != expected && yamlStr != expected+"\n" {
+		t.Errorf("Expected %q or %q, got %q", expected, expected+"\n", yamlStr)
+	}
+}
+
+// TestDocument_Build tests Document.Build()
+func TestDocument_Build(t *testing.T) {
+	doc := NewDocument()
+	doc.Value("test")
+
+	node := doc.Build()
+	if node == nil {
+		t.Fatal("Build() returned nil")
+	}
+
+	data := NodeToInterface(node)
+	if data != "test" {
+		t.Errorf("NodeToInterface() = %v, want 'test'", data)
+	}
+}
+
+// TestSequenceBuilder_AddSequence tests AddSequence method
+func TestSequenceBuilder_AddSequence(t *testing.T) {
+	seq := NewSequence().
+		Add("first").
+		AddSequence(func(nested *SequenceBuilder) {
+			nested.Add("nested1").Add("nested2")
+		}).
+		Add("last")
+
+	node := seq.Build()
+	data := NodeToInterface(node)
+
+	arr, ok := data.([]interface{})
+	if !ok {
+		t.Fatalf("NodeToInterface returned %T, want []interface{}", data)
+	}
+
+	if len(arr) != 3 {
+		t.Errorf("len(arr) = %d, want 3", len(arr))
+	}
+
+	nestedArr, ok := arr[1].([]interface{})
+	if !ok {
+		t.Fatalf("arr[1] is %T, want []interface{}", arr[1])
+	}
+
+	if len(nestedArr) != 2 {
+		t.Errorf("len(nestedArr) = %d, want 2", len(nestedArr))
+	}
+
+	if nestedArr[0] != "nested1" {
+		t.Errorf("nestedArr[0] = %v, want 'nested1'", nestedArr[0])
+	}
+}

@@ -670,3 +670,341 @@ children:
 		t.Error("Expected newlines")
 	}
 }
+
+// TestTokenizer_Directives tests directive matching
+func TestTokenizer_Directives(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "YAML directive",
+			input:    `%YAML 1.2`,
+			expected: `%YAML 1.2`,
+		},
+		{
+			name:     "TAG directive",
+			input:    `%TAG ! tag:example.com,2000:app/`,
+			expected: `%TAG ! tag:example.com,2000:app/`,
+		},
+		{
+			name:     "TAG directive with handle",
+			input:    `%TAG !! tag:yaml.org,2002:`,
+			expected: `%TAG !! tag:yaml.org,2002:`,
+		},
+		{
+			name:     "Custom directive",
+			input:    `%CUSTOM param1 param2`,
+			expected: `%CUSTOM param1 param2`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tok := NewTokenizer()
+			tok.Initialize(tt.input)
+
+			token, ok := tok.NextToken()
+			if !ok {
+				t.Fatal("Expected token")
+			}
+			if token.Kind() != TokenDirective {
+				t.Errorf("Expected TokenDirective, got %s", token.Kind())
+			}
+			if string(token.Value()) != tt.expected {
+				t.Errorf("Expected value %q, got %q", tt.expected, string(token.Value()))
+			}
+		})
+	}
+}
+
+// TestTokenizer_DirectiveEdgeCases tests directive edge cases
+func TestTokenizer_DirectiveEdgeCases(t *testing.T) {
+	tests := []struct {
+		name           string
+		input          string
+		expectDirective bool
+	}{
+		{
+			name:           "percent without uppercase",
+			input:          `%lowercase`,
+			expectDirective: false,
+		},
+		{
+			name:           "percent alone",
+			input:          `%`,
+			expectDirective: false,
+		},
+		{
+			name:           "percent with space",
+			input:          `% YAML`,
+			expectDirective: false,
+		},
+		{
+			name:           "valid directive at end of stream",
+			input:          `%YAML`,
+			expectDirective: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tok := NewTokenizer()
+			tok.Initialize(tt.input)
+
+			token, ok := tok.NextToken()
+			if !ok {
+				if tt.expectDirective {
+					t.Fatal("Expected directive token")
+				}
+				return
+			}
+
+			if tt.expectDirective {
+				if token.Kind() != TokenDirective {
+					t.Errorf("Expected TokenDirective, got %s", token.Kind())
+				}
+			} else {
+				if token.Kind() == TokenDirective {
+					t.Errorf("Did not expect TokenDirective, got %s", token.Kind())
+				}
+			}
+		})
+	}
+}
+
+// TestTokenizer_TagEdgeCases tests tag matching edge cases
+func TestTokenizer_TagEdgeCases(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "shorthand tag",
+			input:    `!tag`,
+			expected: `!tag`,
+		},
+		{
+			name:     "verbatim tag",
+			input:    `!<tag:yaml.org,2002:str>`,
+			expected: `!<tag:yaml.org,2002:str>`,
+		},
+		{
+			name:     "secondary tag",
+			input:    `!!str`,
+			expected: `!!str`,
+		},
+		{
+			name:     "tag with hyphen",
+			input:    `!my-tag`,
+			expected: `!my-tag`,
+		},
+		{
+			name:     "tag with numbers",
+			input:    `!tag123`,
+			expected: `!tag123`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tok := NewTokenizer()
+			tok.Initialize(tt.input)
+
+			token, ok := tok.NextToken()
+			if !ok {
+				t.Fatal("Expected token")
+			}
+			if token.Kind() != TokenTag {
+				t.Errorf("Expected TokenTag, got %s", token.Kind())
+			}
+			if string(token.Value()) != tt.expected {
+				t.Errorf("Expected value %q, got %q", tt.expected, string(token.Value()))
+			}
+		})
+	}
+}
+
+// TestTokenizer_WhitespaceVariations tests various whitespace patterns
+func TestTokenizer_WhitespaceVariations(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{
+			name:  "spaces",
+			input: `   `,
+		},
+		{
+			name:  "tabs",
+			input: "\t\t",
+		},
+		{
+			name:  "mixed",
+			input: " \t ",
+		},
+		{
+			name:  "single space",
+			input: ` `,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tok := NewTokenizer()
+			tok.Initialize(tt.input)
+
+			token, ok := tok.NextToken()
+			if !ok {
+				t.Fatal("Expected whitespace token")
+			}
+			if token.Kind() != "Whitespace" {
+				t.Errorf("Expected Whitespace, got %s", token.Kind())
+			}
+		})
+	}
+}
+
+// TestTokenizer_AnchorEdgeCases tests anchor matching edge cases
+func TestTokenizer_AnchorEdgeCases(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "simple anchor",
+			input:    `&anchor`,
+			expected: `&anchor`,
+		},
+		{
+			name:     "anchor with hyphen",
+			input:    `&my-anchor`,
+			expected: `&my-anchor`,
+		},
+		{
+			name:     "anchor with underscore",
+			input:    `&my_anchor`,
+			expected: `&my_anchor`,
+		},
+		{
+			name:     "anchor with numbers",
+			input:    `&anchor123`,
+			expected: `&anchor123`,
+		},
+		{
+			name:     "short anchor",
+			input:    `&a`,
+			expected: `&a`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tok := NewTokenizer()
+			tok.Initialize(tt.input)
+
+			token, ok := tok.NextToken()
+			if !ok {
+				t.Fatal("Expected token")
+			}
+			if token.Kind() != TokenAnchor {
+				t.Errorf("Expected TokenAnchor, got %s", token.Kind())
+			}
+			if string(token.Value()) != tt.expected {
+				t.Errorf("Expected value %q, got %q", tt.expected, string(token.Value()))
+			}
+		})
+	}
+}
+
+// TestTokenizer_AliasEdgeCases tests alias matching edge cases
+func TestTokenizer_AliasEdgeCases(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "simple alias",
+			input:    `*alias`,
+			expected: `*alias`,
+		},
+		{
+			name:     "alias with hyphen",
+			input:    `*my-alias`,
+			expected: `*my-alias`,
+		},
+		{
+			name:     "alias with underscore",
+			input:    `*my_alias`,
+			expected: `*my_alias`,
+		},
+		{
+			name:     "alias with numbers",
+			input:    `*alias123`,
+			expected: `*alias123`,
+		},
+		{
+			name:     "short alias",
+			input:    `*a`,
+			expected: `*a`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tok := NewTokenizer()
+			tok.Initialize(tt.input)
+
+			token, ok := tok.NextToken()
+			if !ok {
+				t.Fatal("Expected token")
+			}
+			if token.Kind() != TokenAlias {
+				t.Errorf("Expected TokenAlias, got %s", token.Kind())
+			}
+			if string(token.Value()) != tt.expected {
+				t.Errorf("Expected value %q, got %q", tt.expected, string(token.Value()))
+			}
+		})
+	}
+}
+
+// TestTokenizer_NewlineVariations tests different newline styles
+func TestTokenizer_NewlineVariations(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{
+			name:  "LF",
+			input: "\n",
+		},
+		{
+			name:  "CRLF",
+			input: "\r\n",
+		},
+		{
+			name:  "CR (uncommon)",
+			input: "\r",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tok := NewTokenizer()
+			tok.Initialize(tt.input)
+
+			token, ok := tok.NextToken()
+			if !ok {
+				t.Fatal("Expected token")
+			}
+			if token.Kind() != TokenNewline {
+				t.Errorf("Expected TokenNewline, got %s", token.Kind())
+			}
+		})
+	}
+}
