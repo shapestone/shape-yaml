@@ -37,8 +37,8 @@ func TestUnmarshalWithAST(t *testing.T) {
 			},
 		},
 		{
-			name:  "map",
-			input: "key1: value1\nkey2: value2",
+			name:   "map",
+			input:  "key1: value1\nkey2: value2",
 			target: &map[string]string{},
 			check: func(t *testing.T, v interface{}) {
 				m := v.(*map[string]string)
@@ -116,28 +116,44 @@ func TestUnmarshalWithAST_Literals(t *testing.T) {
 		wantErr  bool
 	}{
 		{
-			name:     "string literal",
-			input:    `value: hello`,
-			target:   &struct{ Value string `yaml:"value"` }{},
-			expected: &struct{ Value string `yaml:"value"` }{Value: "hello"},
+			name:  "string literal",
+			input: `value: hello`,
+			target: &struct {
+				Value string `yaml:"value"`
+			}{},
+			expected: &struct {
+				Value string `yaml:"value"`
+			}{Value: "hello"},
 		},
 		{
-			name:     "int literal",
-			input:    `value: 42`,
-			target:   &struct{ Value int `yaml:"value"` }{},
-			expected: &struct{ Value int `yaml:"value"` }{Value: 42},
+			name:  "int literal",
+			input: `value: 42`,
+			target: &struct {
+				Value int `yaml:"value"`
+			}{},
+			expected: &struct {
+				Value int `yaml:"value"`
+			}{Value: 42},
 		},
 		{
-			name:     "float literal",
-			input:    `value: 3.14`,
-			target:   &struct{ Value float64 `yaml:"value"` }{},
-			expected: &struct{ Value float64 `yaml:"value"` }{Value: 3.14},
+			name:  "float literal",
+			input: `value: 3.14`,
+			target: &struct {
+				Value float64 `yaml:"value"`
+			}{},
+			expected: &struct {
+				Value float64 `yaml:"value"`
+			}{Value: 3.14},
 		},
 		{
-			name:     "bool literal",
-			input:    `value: true`,
-			target:   &struct{ Value bool `yaml:"value"` }{},
-			expected: &struct{ Value bool `yaml:"value"` }{Value: true},
+			name:  "bool literal",
+			input: `value: true`,
+			target: &struct {
+				Value bool `yaml:"value"`
+			}{},
+			expected: &struct {
+				Value bool `yaml:"value"`
+			}{Value: true},
 		},
 	}
 
@@ -497,25 +513,25 @@ func TestUnmarshalFromNode_AllPaths(t *testing.T) {
 // TestIsEmptyValue_AllTypes tests isEmptyValue with all Go types
 func TestIsEmptyValue_AllTypes(t *testing.T) {
 	type AllTypes struct {
-		Str     string             `yaml:"str,omitempty"`
-		Int     int                `yaml:"int,omitempty"`
-		Float   float64            `yaml:"float,omitempty"`
-		Bool    bool               `yaml:"bool,omitempty"`
-		Slice   []string           `yaml:"slice,omitempty"`
-		Map     map[string]string  `yaml:"map,omitempty"`
-		Ptr     *string            `yaml:"ptr,omitempty"`
-		Iface   interface{}        `yaml:"iface,omitempty"`
-		Arr     [3]int             `yaml:"arr,omitempty"`
-		Uint    uint               `yaml:"uint,omitempty"`
-		Int8    int8               `yaml:"int8,omitempty"`
-		Int16   int16              `yaml:"int16,omitempty"`
-		Int32   int32              `yaml:"int32,omitempty"`
-		Int64   int64              `yaml:"int64,omitempty"`
-		Uint8   uint8              `yaml:"uint8,omitempty"`
-		Uint16  uint16             `yaml:"uint16,omitempty"`
-		Uint32  uint32             `yaml:"uint32,omitempty"`
-		Uint64  uint64             `yaml:"uint64,omitempty"`
-		Float32 float32            `yaml:"float32,omitempty"`
+		Str     string            `yaml:"str,omitempty"`
+		Int     int               `yaml:"int,omitempty"`
+		Float   float64           `yaml:"float,omitempty"`
+		Bool    bool              `yaml:"bool,omitempty"`
+		Slice   []string          `yaml:"slice,omitempty"`
+		Map     map[string]string `yaml:"map,omitempty"`
+		Ptr     *string           `yaml:"ptr,omitempty"`
+		Iface   interface{}       `yaml:"iface,omitempty"`
+		Arr     [3]int            `yaml:"arr,omitempty"`
+		Uint    uint              `yaml:"uint,omitempty"`
+		Int8    int8              `yaml:"int8,omitempty"`
+		Int16   int16             `yaml:"int16,omitempty"`
+		Int32   int32             `yaml:"int32,omitempty"`
+		Int64   int64             `yaml:"int64,omitempty"`
+		Uint8   uint8             `yaml:"uint8,omitempty"`
+		Uint16  uint16            `yaml:"uint16,omitempty"`
+		Uint32  uint32            `yaml:"uint32,omitempty"`
+		Uint64  uint64            `yaml:"uint64,omitempty"`
+		Float32 float32           `yaml:"float32,omitempty"`
 	}
 
 	// All zero values - should produce minimal YAML
@@ -811,10 +827,10 @@ func TestUnmarshalSequence_ArrayHandling(t *testing.T) {
 			expected: &struct{ Value [3]string }{Value: [3]string{"a", "b", "c"}},
 		},
 		{
-			name:     "array smaller than data",
-			yaml:     `value: [a, b, c, d, e]`,
-			target:   &struct{ Value [3]string }{},
-			wantErr:  true,
+			name:    "array smaller than data",
+			yaml:    `value: [a, b, c, d, e]`,
+			target:  &struct{ Value [3]string }{},
+			wantErr: true,
 		},
 		{
 			name:     "array larger than data",

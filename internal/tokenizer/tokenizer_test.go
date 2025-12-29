@@ -722,28 +722,28 @@ func TestTokenizer_Directives(t *testing.T) {
 // TestTokenizer_DirectiveEdgeCases tests directive edge cases
 func TestTokenizer_DirectiveEdgeCases(t *testing.T) {
 	tests := []struct {
-		name           string
-		input          string
+		name            string
+		input           string
 		expectDirective bool
 	}{
 		{
-			name:           "percent without uppercase",
-			input:          `%lowercase`,
+			name:            "percent without uppercase",
+			input:           `%lowercase`,
 			expectDirective: false,
 		},
 		{
-			name:           "percent alone",
-			input:          `%`,
+			name:            "percent alone",
+			input:           `%`,
 			expectDirective: false,
 		},
 		{
-			name:           "percent with space",
-			input:          `% YAML`,
+			name:            "percent with space",
+			input:           `% YAML`,
 			expectDirective: false,
 		},
 		{
-			name:           "valid directive at end of stream",
-			input:          `%YAML`,
+			name:            "valid directive at end of stream",
+			input:           `%YAML`,
 			expectDirective: true,
 		},
 	}

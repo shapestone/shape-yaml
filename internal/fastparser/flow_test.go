@@ -64,8 +64,8 @@ func TestParser_FlowMapping(t *testing.T) {
 			},
 		},
 		{
-			name:  "empty flow mapping",
-			input: `{}`,
+			name:     "empty flow mapping",
+			input:    `{}`,
 			expected: map[string]interface{}{},
 		},
 		{
@@ -126,16 +126,16 @@ func TestParser_FlowSequence(t *testing.T) {
 			expected: []interface{}{int64(1), "two", true, 4.5},
 		},
 		{
-			name:     "nested flow sequence",
-			input:    `[[1, 2], [3, 4]]`,
+			name:  "nested flow sequence",
+			input: `[[1, 2], [3, 4]]`,
 			expected: []interface{}{
 				[]interface{}{int64(1), int64(2)},
 				[]interface{}{int64(3), int64(4)},
 			},
 		},
 		{
-			name:     "flow sequence with flow mapping",
-			input:    `[{name: Alice}, {name: Bob}]`,
+			name:  "flow sequence with flow mapping",
+			input: `[{name: Alice}, {name: Bob}]`,
 			expected: []interface{}{
 				map[string]interface{}{"name": "Alice"},
 				map[string]interface{}{"name": "Bob"},
@@ -199,15 +199,15 @@ func TestParser_FlowValue(t *testing.T) {
 			expected: map[string]interface{}{"key": "value, with comma"},
 		},
 		{
-			name:     "flow value nested mapping",
-			input:    `{outer: {inner: value}}`,
+			name:  "flow value nested mapping",
+			input: `{outer: {inner: value}}`,
 			expected: map[string]interface{}{
 				"outer": map[string]interface{}{"inner": "value"},
 			},
 		},
 		{
-			name:     "flow value nested sequence",
-			input:    `{key: [1, 2, 3]}`,
+			name:  "flow value nested sequence",
+			input: `{key: [1, 2, 3]}`,
 			expected: map[string]interface{}{
 				"key": []interface{}{int64(1), int64(2), int64(3)},
 			},

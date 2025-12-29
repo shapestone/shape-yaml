@@ -36,8 +36,8 @@ score: 98.6`,
 			},
 		},
 		{
-			name: "struct with missing fields",
-			yaml: `name: Bob`,
+			name:   "struct with missing fields",
+			yaml:   `name: Bob`,
 			target: &Config{},
 			expected: &Config{
 				Name: "Bob",
@@ -57,8 +57,8 @@ enabled: false`,
 			},
 		},
 		{
-			name:   "map[string]interface{}",
-			yaml:   `key1: value1
+			name: "map[string]interface{}",
+			yaml: `key1: value1
 key2: 42
 key3: true`,
 			target: &map[string]interface{}{},
@@ -89,8 +89,8 @@ total: 100`,
 			},
 		},
 		{
-			name:   "interface{} to map",
-			yaml:   `name: Dave
+			name: "interface{} to map",
+			yaml: `name: Dave
 age: 40`,
 			target: new(interface{}),
 			expected: func() interface{} {
@@ -286,9 +286,9 @@ func TestUnmarshal_FlowMapping(t *testing.T) {
 			},
 		},
 		{
-			name:   "empty flow map",
-			yaml:   `{}`,
-			target: &map[string]interface{}{},
+			name:     "empty flow map",
+			yaml:     `{}`,
+			target:   &map[string]interface{}{},
 			expected: &map[string]interface{}{},
 		},
 		{
@@ -954,13 +954,13 @@ func TestUnmarshal_InterfaceBlockSequence(t *testing.T) {
 // TestUnmarshal_StructWithAllFieldTypes tests struct with diverse field types
 func TestUnmarshal_StructWithAllFieldTypes(t *testing.T) {
 	type Complex struct {
-		Str     string
-		Int     int
-		Float   float64
-		Bool    bool
-		Slice   []string
-		Map     map[string]int
-		Nested  struct {
+		Str    string
+		Int    int
+		Float  float64
+		Bool   bool
+		Slice  []string
+		Map    map[string]int
+		Nested struct {
 			Field string
 		}
 		PtrStr *string

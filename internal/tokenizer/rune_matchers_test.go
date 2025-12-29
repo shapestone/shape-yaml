@@ -80,13 +80,13 @@ func TestIsPlainSafeStartRune(t *testing.T) {
 		{'a', true},
 		{'Z', true},
 		{'_', true},
-		{'0', true},  // numbers are actually safe start (they get tokenized as numbers)
-		{'-', false}, // dash not safe start (could be sequence indicator)
-		{':', false}, // colon not safe start
-		{'#', false}, // comment not safe start
-		{'{', false}, // flow mapping not safe start
-		{'[', false}, // flow sequence not safe start
-		{'"', false}, // quoted string not safe start
+		{'0', true},   // numbers are actually safe start (they get tokenized as numbers)
+		{'-', false},  // dash not safe start (could be sequence indicator)
+		{':', false},  // colon not safe start
+		{'#', false},  // comment not safe start
+		{'{', false},  // flow mapping not safe start
+		{'[', false},  // flow sequence not safe start
+		{'"', false},  // quoted string not safe start
 		{'\'', false}, // quoted string not safe start
 	}
 

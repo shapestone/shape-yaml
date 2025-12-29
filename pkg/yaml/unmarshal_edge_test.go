@@ -347,7 +347,7 @@ func TestUnmarshal_StructTags(t *testing.T) {
 		Age        int    `yaml:"age"`
 		Email      string `yaml:"email,omitempty"`
 		Ignored    string `yaml:"-"`
-		unexported string
+		unexported string //nolint:unused // intentionally testing unexported field handling
 	}
 
 	tests := []struct {

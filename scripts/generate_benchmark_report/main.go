@@ -28,12 +28,12 @@ type BenchmarkResult struct {
 
 // BenchmarkGroup groups related benchmarks for comparison
 type BenchmarkGroup struct {
-	Name         string
-	ShapeYAML    *BenchmarkResult // shape-yaml
-	StdYAML      *BenchmarkResult // gopkg.in/yaml.v3
-	Size         string
-	InputSize    int64
-	Operation    string // "Unmarshal", "Marshal", etc.
+	Name      string
+	ShapeYAML *BenchmarkResult // shape-yaml
+	StdYAML   *BenchmarkResult // gopkg.in/yaml.v3
+	Size      string
+	InputSize int64
+	Operation string // "Unmarshal", "Marshal", etc.
 
 	// Comparison ratios (shape-yaml vs gopkg.in/yaml.v3)
 	SpeedupFactor   float64
