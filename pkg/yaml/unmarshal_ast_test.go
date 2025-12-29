@@ -3,6 +3,8 @@ package yaml
 import (
 	"reflect"
 	"testing"
+
+	"github.com/shapestone/shape-core/pkg/ast"
 )
 
 // TestUnmarshalWithAST tests UnmarshalWithAST function
@@ -575,4 +577,288 @@ func TestUnmarshalErrors(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestUnmarshalFromNode_ErrorCases tests error conditions in unmarshalFromNode
+func TestUnmarshalFromNode_ErrorCases(t *testing.T) {
+	// Parse a simple YAML
+	node, err := Parse("value: test")
+	if err != nil {
+		t.Fatalf("Parse() error: %v", err)
+	}
+
+	tests := []struct {
+		name    string
+		node    ast.SchemaNode
+		target  interface{}
+		wantErr string
+	}{
+		{
+			name:    "nil target",
+			node:    node,
+			target:  nil,
+			wantErr: "yaml: Unmarshal(nil)",
+		},
+		{
+			name: "non-pointer target",
+			node: node,
+			target: struct {
+				Value string
+			}{},
+			wantErr: "yaml: Unmarshal(non-pointer",
+		},
+		{
+			name:    "nil pointer target",
+			node:    node,
+			target:  (*struct{ Value string })(nil),
+			wantErr: "yaml: Unmarshal(nil ",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := unmarshalFromNode(tt.node, tt.target)
+			if err == nil {
+				t.Fatal("Expected error, got none")
+			}
+			if !Contains(err.Error(), tt.wantErr) {
+				t.Errorf("Error = %q, want to contain %q", err.Error(), tt.wantErr)
+			}
+		})
+	}
+}
+
+// TestUnmarshalValue_NullHandling tests null value handling
+func TestUnmarshalValue_NullHandling(t *testing.T) {
+	tests := []struct {
+		name     string
+		yaml     string
+		target   interface{}
+		validate func(t *testing.T, v interface{}) bool
+	}{
+		{
+			name:   "null to string",
+			yaml:   `value: null`,
+			target: &struct{ Value string }{Value: "initial"},
+			validate: func(t *testing.T, v interface{}) bool {
+				return v.(*struct{ Value string }).Value == ""
+			},
+		},
+		{
+			name:   "null to int",
+			yaml:   `value: null`,
+			target: &struct{ Value int }{Value: 42},
+			validate: func(t *testing.T, v interface{}) bool {
+				return v.(*struct{ Value int }).Value == 0
+			},
+		},
+		{
+			name:   "null to pointer",
+			yaml:   `value: null`,
+			target: &struct{ Value *string }{},
+			validate: func(t *testing.T, v interface{}) bool {
+				return v.(*struct{ Value *string }).Value == nil
+			},
+		},
+		{
+			name:   "null to slice",
+			yaml:   `value: null`,
+			target: &struct{ Value []string }{},
+			validate: func(t *testing.T, v interface{}) bool {
+				return v.(*struct{ Value []string }).Value == nil
+			},
+		},
+		{
+			name:   "null to map",
+			yaml:   `value: null`,
+			target: &struct{ Value map[string]string }{},
+			validate: func(t *testing.T, v interface{}) bool {
+				return v.(*struct{ Value map[string]string }).Value == nil
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := UnmarshalWithAST([]byte(tt.yaml), tt.target)
+			if err != nil {
+				t.Fatalf("UnmarshalWithAST() error = %v", err)
+			}
+			if !tt.validate(t, tt.target) {
+				t.Error("Validation failed")
+			}
+		})
+	}
+}
+
+// TestUnmarshalValue_PointerHandling tests pointer value handling
+func TestUnmarshalValue_PointerHandling(t *testing.T) {
+	tests := []struct {
+		name     string
+		yaml     string
+		target   interface{}
+		expected interface{}
+	}{
+		{
+			name:     "pointer to string",
+			yaml:     `value: hello`,
+			target:   &struct{ Value *string }{},
+			expected: &struct{ Value *string }{Value: stringPtr("hello")},
+		},
+		{
+			name:     "pointer to int",
+			yaml:     `value: 42`,
+			target:   &struct{ Value *int }{},
+			expected: &struct{ Value *int }{Value: intPtr(42)},
+		},
+		{
+			name:     "pointer to bool",
+			yaml:     `value: true`,
+			target:   &struct{ Value *bool }{},
+			expected: &struct{ Value *bool }{Value: boolPtr(true)},
+		},
+		{
+			name:     "nested pointer",
+			yaml:     `value: test`,
+			target:   &struct{ Value **string }{},
+			expected: &struct{ Value **string }{Value: stringPtrPtr("test")},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := UnmarshalWithAST([]byte(tt.yaml), tt.target)
+			if err != nil {
+				t.Fatalf("UnmarshalWithAST() error = %v", err)
+			}
+			if !reflect.DeepEqual(tt.target, tt.expected) {
+				t.Errorf("\nExpected: %#v\nGot:      %#v", tt.expected, tt.target)
+			}
+		})
+	}
+}
+
+// TestUnmarshalValue_InterfaceHandling tests interface{} handling
+func TestUnmarshalValue_InterfaceHandling(t *testing.T) {
+	tests := []struct {
+		name     string
+		yaml     string
+		target   interface{}
+		validate func(t *testing.T, v interface{}) bool
+	}{
+		{
+			name:   "interface to string",
+			yaml:   `value: hello`,
+			target: &struct{ Value interface{} }{},
+			validate: func(t *testing.T, v interface{}) bool {
+				return v.(*struct{ Value interface{} }).Value == "hello"
+			},
+		},
+		{
+			name:   "interface to int",
+			yaml:   `value: 42`,
+			target: &struct{ Value interface{} }{},
+			validate: func(t *testing.T, v interface{}) bool {
+				return v.(*struct{ Value interface{} }).Value == int64(42)
+			},
+		},
+		{
+			name:   "interface to map",
+			yaml:   `value: {key: val}`,
+			target: &struct{ Value interface{} }{},
+			validate: func(t *testing.T, v interface{}) bool {
+				m, ok := v.(*struct{ Value interface{} }).Value.(map[string]interface{})
+				return ok && m["key"] == "val"
+			},
+		},
+		{
+			name:   "interface to slice",
+			yaml:   `value: [a, b, c]`,
+			target: &struct{ Value interface{} }{},
+			validate: func(t *testing.T, v interface{}) bool {
+				s, ok := v.(*struct{ Value interface{} }).Value.([]interface{})
+				return ok && len(s) == 3 && s[0] == "a"
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := UnmarshalWithAST([]byte(tt.yaml), tt.target)
+			if err != nil {
+				t.Fatalf("UnmarshalWithAST() error = %v", err)
+			}
+			if !tt.validate(t, tt.target) {
+				t.Error("Validation failed")
+			}
+		})
+	}
+}
+
+// TestUnmarshalSequence_ArrayHandling tests array unmarshal including overflow
+func TestUnmarshalSequence_ArrayHandling(t *testing.T) {
+	tests := []struct {
+		name     string
+		yaml     string
+		target   interface{}
+		expected interface{}
+		wantErr  bool
+	}{
+		{
+			name:     "array exact size",
+			yaml:     `value: [a, b, c]`,
+			target:   &struct{ Value [3]string }{},
+			expected: &struct{ Value [3]string }{Value: [3]string{"a", "b", "c"}},
+		},
+		{
+			name:     "array smaller than data",
+			yaml:     `value: [a, b, c, d, e]`,
+			target:   &struct{ Value [3]string }{},
+			wantErr:  true,
+		},
+		{
+			name:     "array larger than data",
+			yaml:     `value: [a, b]`,
+			target:   &struct{ Value [5]string }{},
+			expected: &struct{ Value [5]string }{Value: [5]string{"a", "b", "", "", ""}},
+		},
+		{
+			name:     "int array",
+			yaml:     `value: [1, 2, 3]`,
+			target:   &struct{ Value [3]int }{},
+			expected: &struct{ Value [3]int }{Value: [3]int{1, 2, 3}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := UnmarshalWithAST([]byte(tt.yaml), tt.target)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("UnmarshalWithAST() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if !tt.wantErr {
+				if !reflect.DeepEqual(tt.target, tt.expected) {
+					t.Errorf("\nExpected: %#v\nGot:      %#v", tt.expected, tt.target)
+				}
+			}
+		})
+	}
+}
+
+// Helper functions for pointer creation
+func stringPtr(s string) *string {
+	return &s
+}
+
+func intPtr(i int) *int {
+	return &i
+}
+
+func boolPtr(b bool) *bool {
+	return &b
+}
+
+func stringPtrPtr(s string) **string {
+	p := &s
+	return &p
 }

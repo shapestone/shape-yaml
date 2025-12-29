@@ -415,3 +415,312 @@ custom: !<tag:example.com,2000:type>
 		t.Error("Expected 'custom' field")
 	}
 }
+
+// TestApplyTag_ErrorCases tests error conditions in applyTag
+func TestApplyTag_ErrorCases(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		wantErr bool
+	}{
+		{
+			name:    "!!map tag on literal",
+			input:   `value: !!map 123`,
+			wantErr: true,
+		},
+		{
+			name:    "!!seq tag on literal",
+			input:   `value: !!seq hello`,
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parser := NewParser(tt.input)
+			_, err := parser.Parse()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Parse() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+// TestCoerceToString_AllTypes tests coerceToString with all value types
+func TestCoerceToString_AllTypes(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "int to string",
+			input:    `!!str 123`,
+			expected: "123",
+		},
+		{
+			name:     "float to string",
+			input:    `!!str 3.14`,
+			expected: "3.14",
+		},
+		{
+			name:     "bool true to string",
+			input:    `!!str true`,
+			expected: "true",
+		},
+		{
+			name:     "bool false to string",
+			input:    `!!str false`,
+			expected: "false",
+		},
+		{
+			name:     "null to string",
+			input:    `!!str null`,
+			expected: "null",
+		},
+		{
+			name:     "string to string",
+			input:    `!!str hello`,
+			expected: "hello",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parser := NewParser(tt.input)
+			node, err := parser.Parse()
+			if err != nil {
+				t.Fatalf("Parse() error: %v", err)
+			}
+
+			lit, ok := node.(*ast.LiteralNode)
+			if !ok {
+				t.Fatalf("Expected LiteralNode, got: %T", node)
+			}
+
+			if lit.Value() != tt.expected {
+				t.Errorf("Expected %q, got: %q", tt.expected, lit.Value())
+			}
+		})
+	}
+}
+
+// TestCoerceToInt_AllTypes tests coerceToInt with all value types
+func TestCoerceToInt_AllTypes(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected int64
+		wantErr  bool
+	}{
+		{
+			name:     "int to int",
+			input:    `!!int 123`,
+			expected: 123,
+		},
+		{
+			name:     "float to int",
+			input:    `!!int 42.0`,
+			expected: 42,
+		},
+		{
+			name:     "string to int",
+			input:    `!!int "456"`,
+			expected: 456,
+		},
+		{
+			name:     "bool true to int",
+			input:    `!!int true`,
+			expected: 1,
+		},
+		{
+			name:     "bool false to int",
+			input:    `!!int false`,
+			expected: 0,
+		},
+		{
+			name:     "null to int",
+			input:    `!!int null`,
+			expected: 0,
+		},
+		{
+			name:    "invalid string to int",
+			input:   `!!int "notanumber"`,
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parser := NewParser(tt.input)
+			node, err := parser.Parse()
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("Parse() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if !tt.wantErr {
+				lit, ok := node.(*ast.LiteralNode)
+				if !ok {
+					t.Fatalf("Expected LiteralNode, got: %T", node)
+				}
+				if lit.Value() != tt.expected {
+					t.Errorf("Expected %d, got: %v", tt.expected, lit.Value())
+				}
+			}
+		})
+	}
+}
+
+// TestCoerceToFloat_AllTypes tests coerceToFloat with all value types
+func TestCoerceToFloat_AllTypes(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected float64
+		wantErr  bool
+	}{
+		{
+			name:     "float to float",
+			input:    `!!float 3.14`,
+			expected: 3.14,
+		},
+		{
+			name:     "int to float",
+			input:    `!!float 42`,
+			expected: 42.0,
+		},
+		{
+			name:     "string to float",
+			input:    `!!float "2.718"`,
+			expected: 2.718,
+		},
+		{
+			name:     "bool true to float",
+			input:    `!!float true`,
+			expected: 1.0,
+		},
+		{
+			name:     "bool false to float",
+			input:    `!!float false`,
+			expected: 0.0,
+		},
+		{
+			name:     "null to float",
+			input:    `!!float null`,
+			expected: 0.0,
+		},
+		{
+			name:    "invalid string to float",
+			input:   `!!float "notanumber"`,
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parser := NewParser(tt.input)
+			node, err := parser.Parse()
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("Parse() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if !tt.wantErr {
+				lit, ok := node.(*ast.LiteralNode)
+				if !ok {
+					t.Fatalf("Expected LiteralNode, got: %T", node)
+				}
+				if lit.Value() != tt.expected {
+					t.Errorf("Expected %f, got: %v", tt.expected, lit.Value())
+				}
+			}
+		})
+	}
+}
+
+// TestCoerceToBool_AllTypes tests coerceToBool with all value types
+func TestCoerceToBool_AllTypes(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected bool
+		wantErr  bool
+	}{
+		{
+			name:     "bool to bool",
+			input:    `!!bool true`,
+			expected: true,
+		},
+		{
+			name:     "string yes to bool",
+			input:    `!!bool yes`,
+			expected: true,
+		},
+		{
+			name:     "string on to bool",
+			input:    `!!bool on`,
+			expected: true,
+		},
+		{
+			name:     "string false to bool",
+			input:    `!!bool false`,
+			expected: false,
+		},
+		{
+			name:     "string no to bool",
+			input:    `!!bool no`,
+			expected: false,
+		},
+		{
+			name:     "string off to bool",
+			input:    `!!bool off`,
+			expected: false,
+		},
+		{
+			name:     "int nonzero to bool",
+			input:    `!!bool 42`,
+			expected: true,
+		},
+		{
+			name:     "int zero to bool",
+			input:    `!!bool 0`,
+			expected: false,
+		},
+		{
+			name:     "float nonzero to bool",
+			input:    `!!bool 3.14`,
+			expected: true,
+		},
+		{
+			name:     "float zero to bool",
+			input:    `!!bool 0.0`,
+			expected: false,
+		},
+		{
+			name:     "null to bool",
+			input:    `!!bool null`,
+			expected: false,
+		},
+		{
+			name:    "invalid string to bool",
+			input:   `!!bool "maybe"`,
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parser := NewParser(tt.input)
+			node, err := parser.Parse()
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("Parse() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if !tt.wantErr {
+				lit, ok := node.(*ast.LiteralNode)
+				if !ok {
+					t.Fatalf("Expected LiteralNode, got: %T", node)
+				}
+				if lit.Value() != tt.expected {
+					t.Errorf("Expected %v, got: %v", tt.expected, lit.Value())
+				}
+			}
+		})
+	}
+}

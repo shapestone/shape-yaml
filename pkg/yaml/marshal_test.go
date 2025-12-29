@@ -387,3 +387,270 @@ func TestMarshal_SpecialCharacters(t *testing.T) {
 		})
 	}
 }
+
+// TestMarshalValue_InvalidTypes tests marshalValue with unsupported types
+func TestMarshalValue_InvalidTypes(t *testing.T) {
+	tests := []struct {
+		name    string
+		value   interface{}
+		wantErr bool
+	}{
+		{
+			name:    "channel type",
+			value:   make(chan int),
+			wantErr: true,
+		},
+		{
+			name:    "function type",
+			value:   func() {},
+			wantErr: true,
+		},
+		{
+			name:    "complex64",
+			value:   complex(1, 2),
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := Marshal(tt.value)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Marshal() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+// TestMarshalValue_NilInterface tests marshaling nil interface
+func TestMarshalValue_NilInterface(t *testing.T) {
+	type TestStruct struct {
+		Value interface{} `yaml:"value"`
+	}
+
+	s := TestStruct{Value: nil}
+	result, err := Marshal(s)
+	if err != nil {
+		t.Fatalf("Marshal() error: %v", err)
+	}
+
+	if !strings.Contains(string(result), "value: null") {
+		t.Errorf("Expected 'value: null', got: %s", string(result))
+	}
+}
+
+// TestMarshalValue_InterfaceWrapping tests marshaling interface-wrapped values
+func TestMarshalValue_InterfaceWrapping(t *testing.T) {
+	tests := []struct {
+		name     string
+		value    interface{}
+		expected string
+	}{
+		{
+			name:     "interface wrapping string",
+			value:    interface{}("hello"),
+			expected: "hello",
+		},
+		{
+			name:     "interface wrapping int",
+			value:    interface{}(42),
+			expected: "42",
+		},
+		{
+			name:     "interface wrapping bool",
+			value:    interface{}(true),
+			expected: "true",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := Marshal(tt.value)
+			if err != nil {
+				t.Fatalf("Marshal() error: %v", err)
+			}
+			if !strings.Contains(string(result), tt.expected) {
+				t.Errorf("Expected output to contain %q, got: %s", tt.expected, string(result))
+			}
+		})
+	}
+}
+
+// TestEscapeString_AllEscapeSequences tests escapeString with all escape sequences
+func TestEscapeString_AllEscapeSequences(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{
+			name:  "backslash",
+			input: "path\\to\\file",
+		},
+		{
+			name:  "tab",
+			input: "col1\tcol2",
+		},
+		{
+			name:  "double quote",
+			input: `say "hello"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := Marshal(tt.input)
+			if err != nil {
+				t.Fatalf("Marshal() error: %v", err)
+			}
+			// Verify round-trip: marshal then unmarshal should get original value
+			var decoded string
+			err = Unmarshal(result, &decoded)
+			if err != nil {
+				t.Fatalf("Unmarshal() error: %v", err)
+			}
+			if decoded != tt.input {
+				t.Errorf("Round-trip failed: expected %q, got: %q", tt.input, decoded)
+			}
+		})
+	}
+}
+
+// TestEscapeString_Coverage tests that escape string paths are exercised
+func TestEscapeString_Coverage(t *testing.T) {
+	// Test individual escape sequences by checking they're properly marshaled
+	tests := []struct {
+		name  string
+		input interface{}
+	}{
+		{
+			name:  "struct with quote in field",
+			input: struct{ Value string }{Value: `say "hi"`},
+		},
+		{
+			name:  "struct with backslash in field",
+			input: struct{ Value string }{Value: `path\to\file`},
+		},
+		{
+			name:  "struct with tab in field",
+			input: struct{ Value string }{Value: "col1\tcol2"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := Marshal(tt.input)
+			if err != nil {
+				t.Fatalf("Marshal() error: %v", err)
+			}
+			if len(result) == 0 {
+				t.Error("Expected non-empty marshal output")
+			}
+		})
+	}
+}
+
+// TestNeedsQuoting_EdgeCases tests needsQuoting with edge cases
+func TestNeedsQuoting_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name          string
+		input         string
+		shouldContain string // What we expect in the marshaled output
+	}{
+		{
+			name:          "starts with space",
+			input:         " value",
+			shouldContain: `" value"`,
+		},
+		{
+			name:          "starts with dash",
+			input:         "-value",
+			shouldContain: `"-value"`,
+		},
+		{
+			name:          "starts with question mark",
+			input:         "?value",
+			shouldContain: `"?value"`,
+		},
+		{
+			name:          "simple word no quotes",
+			input:         "simple",
+			shouldContain: "simple",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := Marshal(tt.input)
+			if err != nil {
+				t.Fatalf("Marshal() error: %v", err)
+			}
+			if !strings.Contains(string(result), tt.shouldContain) {
+				t.Errorf("Expected output to contain %q, got: %s", tt.shouldContain, string(result))
+			}
+		})
+	}
+}
+
+// TestMarshalArray tests marshaling arrays (fixed-size)
+func TestMarshalArray(t *testing.T) {
+	tests := []struct {
+		name  string
+		value interface{}
+	}{
+		{
+			name:  "int array",
+			value: [3]int{1, 2, 3},
+		},
+		{
+			name:  "string array",
+			value: [2]string{"a", "b"},
+		},
+		{
+			name:  "bool array",
+			value: [4]bool{true, false, true, false},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := Marshal(tt.value)
+			if err != nil {
+				t.Fatalf("Marshal() error: %v", err)
+			}
+			if len(result) == 0 {
+				t.Error("Expected non-empty result")
+			}
+		})
+	}
+}
+
+// TestIsComplexType tests isComplexType function
+func TestIsComplexType(t *testing.T) {
+	type Simple struct {
+		Value string
+	}
+
+	type Complex struct {
+		Nested map[string]interface{}
+	}
+
+	tests := []struct {
+		name  string
+		value interface{}
+	}{
+		{name: "simple struct", value: Simple{Value: "test"}},
+		{name: "complex struct", value: Complex{Nested: map[string]interface{}{"key": "val"}}},
+		{name: "simple slice", value: []int{1, 2, 3}},
+		{name: "complex slice", value: []map[string]string{{"k": "v"}}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Just exercise the code path - isComplexType is called internally during marshaling
+			_, err := Marshal(tt.value)
+			if err != nil {
+				t.Fatalf("Marshal() error: %v", err)
+			}
+		})
+	}
+}
