@@ -1061,7 +1061,6 @@ func TestUnmarshal_ArrayWithFewerElements(t *testing.T) {
 
 // TestUnmarshal_SliceOfStructs tests unmarshaling to slice of structs
 func TestUnmarshal_SliceOfStructs(t *testing.T) {
-	t.Skip("Block sequence of mappings to slice of structs - multi-line parsing issue")
 	type Item struct {
 		Name  string
 		Value int
@@ -1136,5 +1135,214 @@ func TestUnmarshal_WhitespaceOnly(t *testing.T) {
 				t.Error("Expected error for whitespace-only input")
 			}
 		})
+	}
+}
+
+// TestUnmarshal_InlineSequenceServerURL tests multi-field structs inline in a sequence
+func TestUnmarshal_InlineSequenceServerURL(t *testing.T) {
+	type Server struct {
+		URL         string `yaml:"url"`
+		Description string `yaml:"description"`
+	}
+
+	yaml := `- url: https://api.example.com
+  description: Production
+- url: https://staging.example.com
+  description: Staging`
+
+	var result []Server
+	err := Unmarshal([]byte(yaml), &result)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	if len(result) != 2 {
+		t.Fatalf("Expected 2 servers, got %d", len(result))
+	}
+
+	if result[0].URL != "https://api.example.com" {
+		t.Errorf("First server URL: expected 'https://api.example.com', got %q", result[0].URL)
+	}
+	if result[0].Description != "Production" {
+		t.Errorf("First server Description: expected 'Production', got %q", result[0].Description)
+	}
+	if result[1].URL != "https://staging.example.com" {
+		t.Errorf("Second server URL: expected 'https://staging.example.com', got %q", result[1].URL)
+	}
+	if result[1].Description != "Staging" {
+		t.Errorf("Second server Description: expected 'Staging', got %q", result[1].Description)
+	}
+}
+
+// TestUnmarshal_QuotedMapKeys tests mapping keys that are quoted strings
+func TestUnmarshal_QuotedMapKeys(t *testing.T) {
+	tests := []struct {
+		name     string
+		yaml     string
+		expected map[string]interface{}
+	}{
+		{
+			name: "double quoted key",
+			yaml: `"/users": get
+"/posts": post`,
+			expected: map[string]interface{}{
+				"/users": "get",
+				"/posts": "post",
+			},
+		},
+		{
+			name: "single quoted key",
+			yaml: `'/users': get
+'/posts': post`,
+			expected: map[string]interface{}{
+				"/users": "get",
+				"/posts": "post",
+			},
+		},
+		{
+			name: "quoted key with nested value",
+			yaml: `"/users":
+  method: get
+  auth: true`,
+			expected: map[string]interface{}{
+				"/users": map[string]interface{}{
+					"method": "get",
+					"auth":   true,
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := make(map[string]interface{})
+			err := Unmarshal([]byte(tt.yaml), &result)
+			if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+			if !reflect.DeepEqual(result, tt.expected) {
+				t.Errorf("\nExpected: %+v\nGot:      %+v", tt.expected, result)
+			}
+		})
+	}
+}
+
+// TestUnmarshal_QuotedStringNotMisidentified ensures plain quoted strings are not treated as mapping keys
+func TestUnmarshal_QuotedStringNotMisidentified(t *testing.T) {
+	tests := []struct {
+		name     string
+		yaml     string
+		expected string
+	}{
+		{
+			name:     "double quoted plain string",
+			yaml:     `"hello world"`,
+			expected: "hello world",
+		},
+		{
+			name:     "single quoted plain string",
+			yaml:     `'hello world'`,
+			expected: "hello world",
+		},
+		{
+			name:     "quoted string with colon inside",
+			yaml:     `"time: 12:00"`,
+			expected: "time: 12:00",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var result string
+			err := Unmarshal([]byte(tt.yaml), &result)
+			if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+			if result != tt.expected {
+				t.Errorf("Expected %q, got %q", tt.expected, result)
+			}
+		})
+	}
+}
+
+// TestUnmarshal_OpenAPIStyleDocument is a full integration test combining both bug fixes
+func TestUnmarshal_OpenAPIStyleDocument(t *testing.T) {
+	type Server struct {
+		URL         string `yaml:"url"`
+		Description string `yaml:"description"`
+	}
+
+	type PathItem struct {
+		Summary string `yaml:"summary"`
+		Method  string `yaml:"method"`
+	}
+
+	type OpenAPI struct {
+		Version string              `yaml:"openapi"`
+		Title   string              `yaml:"title"`
+		Servers []Server            `yaml:"servers"`
+		Paths   map[string]PathItem `yaml:"paths"`
+	}
+
+	yaml := `openapi: 3.0.0
+title: My API
+servers:
+  - url: https://api.example.com
+    description: Production
+  - url: https://staging.example.com
+    description: Staging
+paths:
+  "/users":
+    summary: User operations
+    method: get
+  "/posts":
+    summary: Post operations
+    method: post`
+
+	var result OpenAPI
+	err := Unmarshal([]byte(yaml), &result)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	if result.Version != "3.0.0" {
+		t.Errorf("Version: expected '3.0.0', got %q", result.Version)
+	}
+	if result.Title != "My API" {
+		t.Errorf("Title: expected 'My API', got %q", result.Title)
+	}
+	if len(result.Servers) != 2 {
+		t.Fatalf("Expected 2 servers, got %d", len(result.Servers))
+	}
+	if result.Servers[0].URL != "https://api.example.com" {
+		t.Errorf("Server[0].URL: expected 'https://api.example.com', got %q", result.Servers[0].URL)
+	}
+	if result.Servers[0].Description != "Production" {
+		t.Errorf("Server[0].Description: expected 'Production', got %q", result.Servers[0].Description)
+	}
+	if result.Servers[1].URL != "https://staging.example.com" {
+		t.Errorf("Server[1].URL: expected 'https://staging.example.com', got %q", result.Servers[1].URL)
+	}
+
+	if len(result.Paths) != 2 {
+		t.Fatalf("Expected 2 paths, got %d", len(result.Paths))
+	}
+	users, ok := result.Paths["/users"]
+	if !ok {
+		t.Fatal("Missing /users path")
+	}
+	if users.Summary != "User operations" {
+		t.Errorf("/users summary: expected 'User operations', got %q", users.Summary)
+	}
+	if users.Method != "get" {
+		t.Errorf("/users method: expected 'get', got %q", users.Method)
+	}
+
+	posts, ok := result.Paths["/posts"]
+	if !ok {
+		t.Fatal("Missing /posts path")
+	}
+	if posts.Summary != "Post operations" {
+		t.Errorf("/posts summary: expected 'Post operations', got %q", posts.Summary)
 	}
 }
