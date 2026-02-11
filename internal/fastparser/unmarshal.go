@@ -87,9 +87,10 @@ func (p *Parser) unmarshalValueAtIndent(rv reflect.Value, baseIndent int) error 
 		return p.unmarshalFlowMapping(rv)
 	case '[':
 		return p.unmarshalFlowSequence(rv)
-	case '"':
-		return p.unmarshalQuotedString(rv)
-	case '\'':
+	case '"', '\'':
+		if (rv.Kind() == reflect.Map || rv.Kind() == reflect.Struct) && p.isQuotedKeyMapping() {
+			return p.unmarshalBlockMapping(rv, baseIndent)
+		}
 		return p.unmarshalQuotedString(rv)
 	case '-':
 		if p.isSequenceIndicator() {
@@ -117,6 +118,46 @@ func (p *Parser) unmarshalValueAtIndent(rv reflect.Value, baseIndent int) error 
 		// Otherwise it's a scalar
 		return p.unmarshalScalar(rv)
 	}
+}
+
+// isQuotedKeyMapping checks if the current position starts a quoted mapping key
+// (e.g., "/users": ...). It scans past the quoted string and checks for ':' after it.
+func (p *Parser) isQuotedKeyMapping() bool {
+	savedPos := p.pos
+	defer func() { p.pos = savedPos }()
+
+	quote := p.data[p.pos]
+	p.pos++ // skip opening quote
+
+	for p.pos < p.length {
+		c := p.data[p.pos]
+		if c == quote {
+			if quote == '\'' && p.pos+1 < p.length && p.data[p.pos+1] == '\'' {
+				// Escaped single quote
+				p.pos += 2
+				continue
+			}
+			p.pos++ // skip closing quote
+			// Skip spaces after the quoted string
+			for p.pos < p.length && (p.data[p.pos] == ' ' || p.data[p.pos] == '\t') {
+				p.pos++
+			}
+			// Check for ':'
+			if p.pos < p.length && p.data[p.pos] == ':' {
+				return true
+			}
+			return false
+		}
+		if quote == '"' && c == '\\' {
+			p.pos++ // skip escape char
+			if p.pos < p.length {
+				p.pos++ // skip escaped char
+			}
+			continue
+		}
+		p.pos++
+	}
+	return false
 }
 
 // unmarshalBlockMapping unmarshals a YAML block mapping.
@@ -147,6 +188,7 @@ func (p *Parser) unmarshalStruct(rv reflect.Value, baseIndent int) error {
 
 	// Get cached field info
 	fields := getFieldCache(structType)
+	first := true
 
 	for p.pos < p.length {
 		// Skip empty lines and comments
@@ -157,15 +199,16 @@ func (p *Parser) unmarshalStruct(rv reflect.Value, baseIndent int) error {
 
 		// Check indentation
 		lineIndent := p.currentIndent()
-		if lineIndent < baseIndent && baseIndent > 0 {
-			break
-		}
-
-		// For first entry, establish base indent
-		if baseIndent == 0 {
-			baseIndent = lineIndent
-		} else if lineIndent != baseIndent {
-			break
+		if first {
+			first = false
+			if lineIndent >= baseIndent {
+				baseIndent = lineIndent
+			}
+			// When lineIndent < baseIndent (inline after "- "), accept first entry
+		} else {
+			if lineIndent != baseIndent {
+				break
+			}
 		}
 
 		// Parse key
@@ -248,6 +291,7 @@ func (p *Parser) unmarshalMap(rv reflect.Value, baseIndent int) error {
 	}
 
 	valueType := mapType.Elem()
+	first := true
 
 	for p.pos < p.length {
 		p.skipWhitespaceAndComments()
@@ -256,14 +300,15 @@ func (p *Parser) unmarshalMap(rv reflect.Value, baseIndent int) error {
 		}
 
 		lineIndent := p.currentIndent()
-		if lineIndent < baseIndent && baseIndent > 0 {
-			break
-		}
-
-		if baseIndent == 0 {
-			baseIndent = lineIndent
-		} else if lineIndent != baseIndent {
-			break
+		if first {
+			first = false
+			if lineIndent >= baseIndent {
+				baseIndent = lineIndent
+			}
+		} else {
+			if lineIndent != baseIndent {
+				break
+			}
 		}
 
 		// Parse key
@@ -339,6 +384,7 @@ func (p *Parser) unmarshalSlice(rv reflect.Value, baseIndent int) error {
 	elemType := sliceType.Elem()
 
 	var elements []reflect.Value
+	first := true
 
 	for p.pos < p.length {
 		p.skipWhitespaceAndComments()
@@ -347,14 +393,15 @@ func (p *Parser) unmarshalSlice(rv reflect.Value, baseIndent int) error {
 		}
 
 		lineIndent := p.currentIndent()
-		if lineIndent < baseIndent && baseIndent > 0 {
-			break
-		}
-
-		if baseIndent == 0 {
-			baseIndent = lineIndent
-		} else if lineIndent != baseIndent {
-			break
+		if first {
+			first = false
+			if lineIndent >= baseIndent {
+				baseIndent = lineIndent
+			}
+		} else {
+			if lineIndent != baseIndent {
+				break
+			}
 		}
 
 		if p.pos >= p.length || p.data[p.pos] != '-' {
@@ -372,7 +419,7 @@ func (p *Parser) unmarshalSlice(rv reflect.Value, baseIndent int) error {
 		elemVal := reflect.New(elemType).Elem()
 
 		if p.pos < p.length && p.data[p.pos] != '\n' && p.data[p.pos] != '\r' && p.data[p.pos] != '#' {
-			if err := p.unmarshalValueAtIndent(elemVal, baseIndent+1); err != nil {
+			if err := p.unmarshalValueAtIndent(elemVal, p.contentColumn()); err != nil {
 				return err
 			}
 		} else {
@@ -406,6 +453,7 @@ func (p *Parser) unmarshalSlice(rv reflect.Value, baseIndent int) error {
 func (p *Parser) unmarshalArray(rv reflect.Value, baseIndent int) error {
 	arrayLen := rv.Len()
 	idx := 0
+	first := true
 
 	for p.pos < p.length && idx < arrayLen {
 		p.skipWhitespaceAndComments()
@@ -414,14 +462,15 @@ func (p *Parser) unmarshalArray(rv reflect.Value, baseIndent int) error {
 		}
 
 		lineIndent := p.currentIndent()
-		if lineIndent < baseIndent && baseIndent > 0 {
-			break
-		}
-
-		if baseIndent == 0 {
-			baseIndent = lineIndent
-		} else if lineIndent != baseIndent {
-			break
+		if first {
+			first = false
+			if lineIndent >= baseIndent {
+				baseIndent = lineIndent
+			}
+		} else {
+			if lineIndent != baseIndent {
+				break
+			}
 		}
 
 		if p.pos >= p.length || p.data[p.pos] != '-' {
@@ -438,7 +487,7 @@ func (p *Parser) unmarshalArray(rv reflect.Value, baseIndent int) error {
 		elemVal := rv.Index(idx)
 
 		if p.pos < p.length && p.data[p.pos] != '\n' && p.data[p.pos] != '\r' && p.data[p.pos] != '#' {
-			if err := p.unmarshalValueAtIndent(elemVal, baseIndent+1); err != nil {
+			if err := p.unmarshalValueAtIndent(elemVal, p.contentColumn()); err != nil {
 				return err
 			}
 		} else {

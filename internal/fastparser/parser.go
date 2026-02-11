@@ -123,6 +123,7 @@ func (p *Parser) isSequenceIndicator() bool {
 // parseBlockMapping parses a YAML block mapping.
 func (p *Parser) parseBlockMapping(baseIndent int) (map[string]interface{}, error) {
 	result := make(map[string]interface{})
+	first := true
 
 	for p.pos < p.length {
 		// Skip empty lines and comments
@@ -133,15 +134,16 @@ func (p *Parser) parseBlockMapping(baseIndent int) (map[string]interface{}, erro
 
 		// Check indentation
 		lineIndent := p.currentIndent()
-		if lineIndent < baseIndent {
-			break // Dedented, end of this mapping
-		}
-
-		// For first entry, establish the base indent
-		if len(result) == 0 {
-			baseIndent = lineIndent
-		} else if lineIndent != baseIndent {
-			break // Different indentation level
+		if first {
+			first = false
+			if lineIndent >= baseIndent {
+				baseIndent = lineIndent
+			}
+			// When lineIndent < baseIndent (inline after "- "), accept first entry
+		} else {
+			if lineIndent != baseIndent {
+				break
+			}
 		}
 
 		// Parse key
@@ -195,6 +197,7 @@ func (p *Parser) parseBlockMapping(baseIndent int) (map[string]interface{}, erro
 // parseBlockSequence parses a YAML block sequence.
 func (p *Parser) parseBlockSequence(baseIndent int) ([]interface{}, error) {
 	result := make([]interface{}, 0, 8)
+	first := true
 
 	for p.pos < p.length {
 		// Skip empty lines and comments
@@ -205,15 +208,15 @@ func (p *Parser) parseBlockSequence(baseIndent int) ([]interface{}, error) {
 
 		// Check indentation
 		lineIndent := p.currentIndent()
-		if lineIndent < baseIndent {
-			break // Dedented
-		}
-
-		// For first entry, establish the base indent
-		if len(result) == 0 {
-			baseIndent = lineIndent
-		} else if lineIndent != baseIndent {
-			break
+		if first {
+			first = false
+			if lineIndent >= baseIndent {
+				baseIndent = lineIndent
+			}
+		} else {
+			if lineIndent != baseIndent {
+				break
+			}
 		}
 
 		// Must have dash
@@ -235,7 +238,7 @@ func (p *Parser) parseBlockSequence(baseIndent int) ([]interface{}, error) {
 
 		if p.pos < p.length && p.data[p.pos] != '\n' && p.data[p.pos] != '\r' && p.data[p.pos] != '#' {
 			// Inline value after dash
-			value, err = p.parseValue(baseIndent + 2)
+			value, err = p.parseValue(p.contentColumn())
 			if err != nil {
 				return nil, fmt.Errorf("in sequence item %d: %w", len(result), err)
 			}
@@ -808,6 +811,18 @@ func (p *Parser) currentIndent() int {
 		}
 	}
 	return indent
+}
+
+// contentColumn returns the zero-based byte column of p.pos on the current line.
+// Unlike currentIndent() which always returns the leading whitespace count,
+// contentColumn() returns the actual column position of the current byte.
+// For example, for "  - url:" with p.pos at 'u', this returns 4.
+func (p *Parser) contentColumn() int {
+	lineStart := p.pos
+	for lineStart > 0 && p.data[lineStart-1] != '\n' && p.data[lineStart-1] != '\r' {
+		lineStart--
+	}
+	return p.pos - lineStart
 }
 
 // trimBytes trims whitespace from both ends of a byte slice.

@@ -1,6 +1,7 @@
 package yaml
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -81,6 +82,88 @@ func BenchmarkRoundTrip(b *testing.B) {
 		}
 		var result BenchConfig
 		err = Unmarshal(data, &result)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// --- Medium Marshal ---
+
+type BenchNestedConfig struct {
+	Name     string            `yaml:"name"`
+	Version  string            `yaml:"version"`
+	Enabled  bool              `yaml:"enabled"`
+	Count    int               `yaml:"count"`
+	Tags     []string          `yaml:"tags"`
+	Metadata map[string]string `yaml:"metadata"`
+	Server   struct {
+		Host string `yaml:"host"`
+		Port int    `yaml:"port"`
+	} `yaml:"server"`
+}
+
+func BenchmarkShapeYAML_Marshal_Medium(b *testing.B) {
+	cfg := BenchNestedConfig{
+		Name:    "myapp",
+		Version: "2.0",
+		Enabled: true,
+		Count:   100,
+		Tags:    []string{"production", "web", "api"},
+		Metadata: map[string]string{
+			"region": "us-east-1",
+			"tier":   "premium",
+		},
+	}
+	cfg.Server.Host = "localhost"
+	cfg.Server.Port = 8080
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := Marshal(cfg)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// --- Large Marshal ---
+
+type BenchLargeConfig struct {
+	Name     string              `yaml:"name"`
+	Version  string              `yaml:"version"`
+	Services []BenchServiceEntry `yaml:"services"`
+}
+
+type BenchServiceEntry struct {
+	Name    string            `yaml:"name"`
+	Image   string            `yaml:"image"`
+	Port    int               `yaml:"port"`
+	Env     map[string]string `yaml:"env"`
+	Enabled bool              `yaml:"enabled"`
+}
+
+func BenchmarkShapeYAML_Marshal_Large(b *testing.B) {
+	cfg := BenchLargeConfig{
+		Name:    "cluster",
+		Version: "3.0",
+	}
+	for i := 0; i < 50; i++ {
+		cfg.Services = append(cfg.Services, BenchServiceEntry{
+			Name:  "service-" + strconv.Itoa(i),
+			Image: "registry.example.com/service:" + strconv.Itoa(i),
+			Port:  8000 + i,
+			Env: map[string]string{
+				"ENV":       "production",
+				"LOG_LEVEL": "info",
+			},
+			Enabled: i%2 == 0,
+		})
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := Marshal(cfg)
 		if err != nil {
 			b.Fatal(err)
 		}

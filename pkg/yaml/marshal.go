@@ -90,16 +90,36 @@ func putBuffer(buf *bytes.Buffer) {
 //	data, err := yaml.Marshal(cfg)
 //	// data is []byte("name: server\nport: 8080\n")
 func Marshal(v interface{}) ([]byte, error) {
-	buf := getBuffer()
-	defer putBuffer(buf)
+	if v == nil {
+		return []byte("null"), nil
+	}
 
-	if err := marshalValue(reflect.ValueOf(v), buf, 0); err != nil {
+	rv := reflect.ValueOf(v)
+	for rv.Kind() == reflect.Ptr {
+		if rv.IsNil() {
+			return []byte("null"), nil
+		}
+		rv = rv.Elem()
+	}
+
+	enc := yamlEncoderForType(rv.Type())
+
+	// Use pooled []byte slice
+	bp := yamlBufPool.Get().(*[]byte)
+	buf := (*bp)[:0]
+
+	var err error
+	buf, err = enc(buf, rv, 0)
+	if err != nil {
+		*bp = buf
+		yamlBufPool.Put(bp)
 		return nil, err
 	}
 
-	// Must copy since buffer will be returned to pool
-	result := make([]byte, buf.Len())
-	copy(result, buf.Bytes())
+	result := make([]byte, len(buf))
+	copy(result, buf)
+	*bp = buf
+	yamlBufPool.Put(bp)
 	return result, nil
 }
 
