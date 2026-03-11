@@ -441,7 +441,7 @@ func buildYAMLMapEncoder(t reflect.Type) yamlEncoderFunc {
 		// Get or create a kv slice from pool
 		var pairs []yamlMapKV
 		if v := yamlMapKVPool.Get(); v != nil {
-			pairs = v.([]yamlMapKV)[:0]
+			pairs = (*v.(*[]yamlMapKV))[:0]
 		}
 		if cap(pairs) < n {
 			pairs = make([]yamlMapKV, 0, n)
@@ -482,7 +482,7 @@ func buildYAMLMapEncoder(t reflect.Type) yamlEncoderFunc {
 					for j := range pairs {
 						pairs[j].val = reflect.Value{}
 					}
-					yamlMapKVPool.Put(pairs)
+					yamlMapKVPool.Put(&pairs)
 					return buf, err
 				}
 			} else {
@@ -492,7 +492,7 @@ func buildYAMLMapEncoder(t reflect.Type) yamlEncoderFunc {
 					for j := range pairs {
 						pairs[j].val = reflect.Value{}
 					}
-					yamlMapKVPool.Put(pairs)
+					yamlMapKVPool.Put(&pairs)
 					return buf, err
 				}
 			}
@@ -502,7 +502,7 @@ func buildYAMLMapEncoder(t reflect.Type) yamlEncoderFunc {
 		for i := range pairs {
 			pairs[i].val = reflect.Value{}
 		}
-		yamlMapKVPool.Put(pairs)
+		yamlMapKVPool.Put(&pairs)
 
 		return buf, nil
 	}

@@ -65,18 +65,3 @@ func needsQuotingFast(s string) bool {
 
 	return false
 }
-
-// sortYAMLStrings sorts a string slice in-place using insertion sort.
-// For the small key counts typical in YAML maps (< 20 keys) this is
-// faster than sort.Strings because it avoids the interface overhead.
-func sortYAMLStrings(s []string) {
-	for i := 1; i < len(s); i++ {
-		key := s[i]
-		j := i - 1
-		for j >= 0 && s[j] > key {
-			s[j+1] = s[j]
-			j--
-		}
-		s[j+1] = key
-	}
-}
