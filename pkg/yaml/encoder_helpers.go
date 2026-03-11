@@ -65,4 +65,3 @@ func needsQuotingFast(s string) bool {
 
 	return false
 }
-

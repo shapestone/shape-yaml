@@ -57,4 +57,3 @@ func getFieldInfo(field reflect.StructField) fieldInfo {
 		omitEmpty: omitEmpty,
 	}
 }
-
