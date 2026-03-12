@@ -1,3 +1,5 @@
+// Package tokenizer provides YAML tokenization — splitting raw YAML text into
+// typed tokens (keys, values, document markers, etc.) consumed by the parser.
 package tokenizer
 
 import (

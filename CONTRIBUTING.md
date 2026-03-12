@@ -31,7 +31,7 @@ There are many ways to contribute to shape-yaml:
 
 ### Prerequisites
 
-- Go 1.25 or later
+- Go 1.23 or later
 - Git
 
 ### Clone and Setup
@@ -59,7 +59,7 @@ shape-yaml/
 ### Run All Tests
 
 ```bash
-go test ./...
+make test
 ```
 
 ### Run Specific Package Tests
@@ -73,21 +73,19 @@ go test ./internal/parser
 ### Run with Coverage
 
 ```bash
-go test ./... -cover
-go test ./... -coverprofile=coverage.out
-go tool cover -html=coverage.out
+make test-coverage
 ```
 
 ### Run Benchmarks
 
 ```bash
-go test ./pkg/yaml -bench=. -benchmem
+make bench
 ```
 
 ### Run Fuzz Tests
 
 ```bash
-go test ./pkg/yaml -fuzz=FuzzParse -fuzztime=30s
+make test-fuzz
 ```
 
 ## Submitting Changes
@@ -95,7 +93,7 @@ go test ./pkg/yaml -fuzz=FuzzParse -fuzztime=30s
 ### Before Submitting
 
 1. **Add tests**: All new features and bug fixes must include tests
-2. **Run tests**: Ensure all tests pass (`go test ./...`)
+2. **Run tests**: Ensure all tests pass (`make test`)
 3. **Run linters**: Code should pass go vet and golint
 4. **Update docs**: Update README.md, ARCHITECTURE.md, or inline docs as needed
 5. **Follow conventions**: Match existing code style and patterns
@@ -225,7 +223,7 @@ Fixes #42
 
 ## License
 
-By contributing to shape-yaml, you agree that your contributions will be licensed under the MIT License.
+By contributing to shape-yaml, you agree that your contributions will be licensed under the Apache License 2.0.
 
 ---
 
