@@ -1,6 +1,8 @@
 # shape-yaml
 
-> **Part of the [Shape Parser™ Ecosystem](https://github.com/shapestone/shape)** — Universal AST for YAML, JSON, XML, and more.
+A fast, spec-compliant YAML 1.2 parser for Go that converts YAML files into a universal Abstract Syntax Tree (AST) or directly into Go structs.
+
+> **Part of the [Shape Parser™ Ecosystem](https://github.com/shapestone/shape)** — Universal AST for YAML (YAML Ain't Markup Language), JSON, XML, and more.
 
 [![Build Status](https://github.com/shapestone/shape-yaml/actions/workflows/ci.yml/badge.svg)](https://github.com/shapestone/shape-yaml/actions/workflows/ci.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/shapestone/shape-yaml)](https://goreportcard.com/report/github.com/shapestone/shape-yaml)
@@ -22,12 +24,25 @@ Parses YAML data (YAML 1.2 spec) into Shape Parser's™ unified AST representati
 ## Features
 
 - ✅ **Full YAML 1.2 spec support** - Anchors, aliases, multi-line strings, flow style, multiple documents
-- ✅ **Dual-path architecture** - Automatic selection between fast parser (9-10x faster) and AST parser
+- ✅ **Dual-path architecture** - Automatic selection between fast parser (9-10x faster) and AST (Abstract Syntax Tree) parser
 - ✅ **Zero external dependencies** - Only depends on shape-core for AST integration
 - ✅ **Shape ecosystem integration** - Universal AST works across JSON, YAML, XML parsers
 - ✅ **Streaming support** - Constant memory usage for large files
 - ✅ **RFC compliant** - Complete YAML 1.2 specification compliance
 - ✅ **Production-ready** - 95%+ test coverage, extensive fuzzing, benchmarked
+
+## Who It's For
+
+shape-yaml is for Go developers who need reliable YAML parsing with full YAML 1.2 specification support — config file loading, Kubernetes manifest processing, CI/CD pipeline tooling, or any application that reads or writes YAML.
+
+## Use Cases
+
+- Load application config files (`.yaml`, `.yml`) into Go structs
+- Parse Kubernetes manifests and Helm chart values
+- Convert YAML to JSON or other formats via the universal AST
+- Validate YAML files programmatically
+- Build YAML documents from code using the fluent builder API
+- Process large YAML files with constant memory via streaming
 
 ## Installation
 
@@ -258,9 +273,7 @@ BenchmarkFluentAPI-10       735999      825 ns/op     1177 B/op     19 allocs/op
 ### Fuzz Testing
 
 ```bash
-go test ./pkg/yaml -fuzz=FuzzParse -fuzztime=30s
-go test ./pkg/yaml -fuzz=FuzzUnmarshal -fuzztime=30s
-go test ./pkg/yaml -fuzz=FuzzRoundTrip -fuzztime=30s
+make test-fuzz
 ```
 
 ## API Reference
@@ -347,6 +360,27 @@ make test-fuzz
 # Benchmarks
 make bench
 ```
+
+## Makefile Reference
+
+| Target | Description |
+|--------|-------------|
+| `make test` | Run unit tests and grammar tests |
+| `make test-unit` | Run unit tests with race detector |
+| `make test-grammar` | Run YAML 1.2 grammar conformance tests |
+| `make test-fuzz` | Run fuzz tests against parser, fast parser, and tokenizer |
+| `make test-coverage` | Run tests with HTML coverage report |
+| `make lint` | Run golangci-lint static analysis |
+| `make build` | Build all packages |
+| `make bench` | Run benchmarks with memory stats |
+| `make bench-report` | Save benchmark results to `benchmarks/results.txt` |
+| `make bench-compare` | Run 10 benchmark iterations for statistical analysis |
+| `make bench-profile` | Generate CPU and memory profiles |
+| `make performance-report` | Generate `PERFORMANCE_REPORT.md` |
+| `make bench-history` | List saved benchmark history runs |
+| `make bench-compare-history` | Compare latest benchmarks against prior baseline |
+| `make clean` | Remove coverage files and test cache |
+| `make all` | Run lint, test, build, and coverage |
 
 ## Documentation
 
