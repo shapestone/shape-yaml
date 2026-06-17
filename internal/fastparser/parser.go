@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -1539,11 +1540,16 @@ func stringifyValue(val interface{}) string {
 		}
 		return "false"
 	case map[string]interface{}:
-		parts := make([]string, 0, len(v))
-		for k, val := range v {
-			parts = append(parts, fmt.Sprintf("%s: %s", k, stringifyValue(val)))
+		keys := make([]string, 0, len(v))
+		for k := range v {
+			keys = append(keys, k)
 		}
-		return "{" + joinWords(parts) + "}"
+		sort.Strings(keys)
+		parts := make([]string, 0, len(v))
+		for _, k := range keys {
+			parts = append(parts, fmt.Sprintf("%s: %s", k, stringifyValue(v[k])))
+		}
+		return "{" + strings.Join(parts, ", ") + "}"
 	case []interface{}:
 		parts := make([]string, 0, len(v))
 		for i, item := range v {
