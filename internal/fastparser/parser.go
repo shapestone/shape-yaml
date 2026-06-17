@@ -14,31 +14,38 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"strings"
 )
 
 // Parser implements a high-performance YAML parser that builds values directly without AST.
 type Parser struct {
-	data   []byte
-	pos    int
-	length int
-	line   int
-	column int
+	data    []byte
+	pos     int
+	length  int
+	line    int
+	column  int
+	anchors map[string]interface{}
 }
 
 // NewParser creates a new fast parser for the given data.
 func NewParser(data []byte) *Parser {
 	return &Parser{
-		data:   data,
-		pos:    0,
-		length: len(data),
-		line:   1,
-		column: 1,
+		data:    data,
+		pos:     0,
+		length:  len(data),
+		line:    1,
+		column:  1,
+		anchors: make(map[string]interface{}),
 	}
 }
 
 // Parse parses the YAML data and returns the value as interface{}.
 func (p *Parser) Parse() (interface{}, error) {
+	p.skipDirectives()
 	p.skipWhitespaceAndComments()
+	p.skipDocumentMarkers()
+	p.skipWhitespaceAndComments()
+
 	if p.pos >= p.length {
 		return nil, nil // Empty document
 	}
@@ -51,6 +58,53 @@ func (p *Parser) Parse() (interface{}, error) {
 	return value, nil
 }
 
+// ParseMultiDoc parses a YAML stream containing multiple documents separated by ---.
+func (p *Parser) ParseMultiDoc() ([]interface{}, error) {
+	var docs []interface{}
+
+	p.skipDirectives()
+	p.skipWhitespaceAndComments()
+	p.skipDocumentMarkers()
+
+	for {
+		p.skipWhitespaceAndComments()
+		if p.pos >= p.length {
+			break
+		}
+
+		value, err := p.parseValue(0)
+		if err != nil {
+			return nil, err
+		}
+		docs = append(docs, value)
+
+		p.skipWhitespaceAndComments()
+		if p.pos >= p.length {
+			break
+		}
+
+		// Check for document separator or end
+		if p.isDocumentMarker() {
+			marker := p.data[p.pos]
+			p.skipLine()
+			if marker == '.' {
+				break // ... ends the stream
+			}
+			// --- separates documents, continue
+			p.skipDirectives()
+			continue
+		}
+
+		break
+	}
+
+	if len(docs) == 0 {
+		docs = append(docs, nil)
+	}
+
+	return docs, nil
+}
+
 // parseValue parses any YAML value at the given indentation level.
 func (p *Parser) parseValue(indent int) (interface{}, error) {
 	p.skipWhitespaceAndComments()
@@ -59,6 +113,21 @@ func (p *Parser) parseValue(indent int) (interface{}, error) {
 	}
 
 	c := p.data[p.pos]
+
+	// Anchors (&name value)
+	if c == '&' {
+		return p.parseAnchoredValue(indent)
+	}
+
+	// Aliases (*name)
+	if c == '*' {
+		return p.parseAlias()
+	}
+
+	// Tags (!!type value)
+	if c == '!' {
+		return p.parseTaggedValue(indent)
+	}
 
 	// Flow style
 	if c == '{' {
@@ -73,6 +142,11 @@ func (p *Parser) parseValue(indent int) (interface{}, error) {
 		if p.isBlockScalarIndicator() {
 			return p.parseBlockScalar(c == '>')
 		}
+	}
+
+	// Complex key (? marker)
+	if c == '?' && p.isComplexKeyIndicator() {
+		return p.parseComplexMapping(indent)
 	}
 
 	// Block sequence (starts with -)
@@ -163,12 +237,18 @@ func (p *Parser) isSequenceIndicator() bool {
 // parseBlockMapping parses a YAML block mapping.
 func (p *Parser) parseBlockMapping(baseIndent int) (map[string]interface{}, error) {
 	result := make(map[string]interface{})
+	var mergeValues []interface{}
 	first := true
 
 	for p.pos < p.length {
 		// Skip empty lines and comments
 		p.skipWhitespaceAndComments()
 		if p.pos >= p.length {
+			break
+		}
+
+		// Document markers end the current mapping
+		if p.isDocumentMarker() {
 			break
 		}
 
@@ -228,10 +308,44 @@ func (p *Parser) parseBlockMapping(baseIndent int) (map[string]interface{}, erro
 			}
 		}
 
+		// Merge key: collect for deferred application
+		if key == "<<" {
+			mergeValues = append(mergeValues, value)
+			continue
+		}
+
 		result[key] = value
 	}
 
+	// Apply merge keys: merged properties don't override explicit ones
+	for _, mv := range mergeValues {
+		p.applyMerge(result, mv)
+	}
+
 	return result, nil
+}
+
+// applyMerge merges properties from a merge key value into a result map.
+// Explicit properties (already in result) are never overridden.
+func (p *Parser) applyMerge(result map[string]interface{}, mergeVal interface{}) {
+	switch v := mergeVal.(type) {
+	case map[string]interface{}:
+		for k, val := range v {
+			if _, exists := result[k]; !exists {
+				result[k] = val
+			}
+		}
+	case []interface{}:
+		for _, item := range v {
+			if m, ok := item.(map[string]interface{}); ok {
+				for k, val := range m {
+					if _, exists := result[k]; !exists {
+						result[k] = val
+					}
+				}
+			}
+		}
+	}
 }
 
 // parseBlockSequence parses a YAML block sequence.
@@ -243,6 +357,11 @@ func (p *Parser) parseBlockSequence(baseIndent int) ([]interface{}, error) {
 		// Skip empty lines and comments
 		p.skipWhitespaceAndComments()
 		if p.pos >= p.length {
+			break
+		}
+
+		// Document markers end the current sequence
+		if p.isDocumentMarker() {
 			break
 		}
 
@@ -1112,6 +1231,328 @@ func appendRune(b []byte, r rune) []byte {
 		return append(b, byte(0xE0|(r>>12)), byte(0x80|((r>>6)&0x3F)), byte(0x80|(r&0x3F)))
 	}
 	return append(b, byte(0xF0|(r>>18)), byte(0x80|((r>>12)&0x3F)), byte(0x80|((r>>6)&0x3F)), byte(0x80|(r&0x3F)))
+}
+
+// parseAnchoredValue parses an anchored value: &name value
+func (p *Parser) parseAnchoredValue(indent int) (interface{}, error) {
+	p.advance() // skip '&'
+
+	// Read anchor name
+	start := p.pos
+	for p.pos < p.length {
+		c := p.data[p.pos]
+		if c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == ':' || c == ',' || c == '}' || c == ']' {
+			break
+		}
+		p.advance()
+	}
+	if p.pos == start {
+		return nil, fmt.Errorf("expected anchor name after '&' at line %d", p.line)
+	}
+	anchorName := string(p.data[start:p.pos])
+
+	// Skip whitespace (but not newlines for inline values)
+	p.skipSpaces()
+
+	// Parse the value
+	value, err := p.parseValue(indent)
+	if err != nil {
+		return nil, fmt.Errorf("in anchored value &%s: %w", anchorName, err)
+	}
+
+	p.anchors[anchorName] = value
+	return value, nil
+}
+
+// parseAlias parses an alias reference: *name
+func (p *Parser) parseAlias() (interface{}, error) {
+	p.advance() // skip '*'
+
+	// Read alias name
+	start := p.pos
+	for p.pos < p.length {
+		c := p.data[p.pos]
+		if c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == ':' || c == ',' || c == '}' || c == ']' {
+			break
+		}
+		p.advance()
+	}
+	if p.pos == start {
+		return nil, fmt.Errorf("expected alias name after '*' at line %d", p.line)
+	}
+	aliasName := string(p.data[start:p.pos])
+
+	value, exists := p.anchors[aliasName]
+	if !exists {
+		return nil, fmt.Errorf("undefined alias *%s at line %d", aliasName, p.line)
+	}
+
+	return value, nil
+}
+
+// parseTaggedValue parses a tagged value: !!type value or !tag value
+func (p *Parser) parseTaggedValue(indent int) (interface{}, error) {
+	// Read the tag
+	start := p.pos
+	for p.pos < p.length {
+		c := p.data[p.pos]
+		if c == ' ' || c == '\t' || c == '\n' || c == '\r' {
+			break
+		}
+		p.advance()
+	}
+	tag := string(p.data[start:p.pos])
+
+	p.skipSpaces()
+
+	// Parse the value after the tag
+	value, err := p.parseValue(indent)
+	if err != nil {
+		return nil, fmt.Errorf("in tagged value %s: %w", tag, err)
+	}
+
+	return p.applyTag(tag, value), nil
+}
+
+// applyTag applies a YAML tag to coerce a value to a specific type.
+func (p *Parser) applyTag(tag string, value interface{}) interface{} {
+	switch tag {
+	case "!!str":
+		if value == nil {
+			return ""
+		}
+		return fmt.Sprintf("%v", value)
+	case "!!int":
+		switch v := value.(type) {
+		case int64:
+			return v
+		case float64:
+			return int64(v)
+		case string:
+			if i, err := strconv.ParseInt(v, 10, 64); err == nil {
+				return i
+			}
+		case bool:
+			if v {
+				return int64(1)
+			}
+			return int64(0)
+		}
+		return value
+	case "!!float":
+		switch v := value.(type) {
+		case float64:
+			return v
+		case int64:
+			return float64(v)
+		case string:
+			if f, err := strconv.ParseFloat(v, 64); err == nil {
+				return f
+			}
+		}
+		return value
+	case "!!bool":
+		switch v := value.(type) {
+		case bool:
+			return v
+		case string:
+			switch v {
+			case "true", "True", "TRUE", "yes", "Yes", "YES", "on", "On", "ON":
+				return true
+			case "false", "False", "FALSE", "no", "No", "NO", "off", "Off", "OFF":
+				return false
+			}
+		case int64:
+			return v != 0
+		case float64:
+			return v != 0
+		}
+		return value
+	case "!!null":
+		return nil
+	default:
+		return value
+	}
+}
+
+// isAtLineStart returns true if pos is at column 0 (start of input or after a newline).
+func (p *Parser) isAtLineStart() bool {
+	return p.pos == 0 || (p.pos > 0 && (p.data[p.pos-1] == '\n' || p.data[p.pos-1] == '\r'))
+}
+
+// isDocumentMarker checks if the current position is a document marker (--- or ...).
+func (p *Parser) isDocumentMarker() bool {
+	if p.pos+2 >= p.length {
+		return false
+	}
+	if !p.isAtLineStart() {
+		return false
+	}
+	c := p.data[p.pos]
+	if (c == '-' && p.data[p.pos+1] == '-' && p.data[p.pos+2] == '-') ||
+		(c == '.' && p.data[p.pos+1] == '.' && p.data[p.pos+2] == '.') {
+		// Must be followed by whitespace, newline, or EOF
+		if p.pos+3 >= p.length {
+			return true
+		}
+		next := p.data[p.pos+3]
+		return next == ' ' || next == '\t' || next == '\n' || next == '\r'
+	}
+	return false
+}
+
+// skipDocumentMarkers skips --- and ... document markers.
+func (p *Parser) skipDocumentMarkers() {
+	for p.pos < p.length && p.isDocumentMarker() {
+		p.skipLine()
+		p.skipWhitespaceAndComments()
+	}
+}
+
+// skipDirectives skips %YAML and %TAG directive lines.
+func (p *Parser) skipDirectives() {
+	for p.pos < p.length && p.data[p.pos] == '%' {
+		p.skipLine()
+		p.skipWhitespaceAndComments()
+	}
+}
+
+// skipLine advances past the current line (to the start of the next line).
+func (p *Parser) skipLine() {
+	for p.pos < p.length {
+		c := p.data[p.pos]
+		p.advance()
+		if c == '\n' {
+			return
+		}
+		if c == '\r' {
+			if p.pos < p.length && p.data[p.pos] == '\n' {
+				p.advance()
+			}
+			return
+		}
+	}
+}
+
+// isComplexKeyIndicator checks if current position is a complex key indicator (? followed by space/newline).
+func (p *Parser) isComplexKeyIndicator() bool {
+	if p.pos >= p.length || p.data[p.pos] != '?' {
+		return false
+	}
+	if p.pos+1 >= p.length {
+		return true
+	}
+	next := p.data[p.pos+1]
+	return next == ' ' || next == '\t' || next == '\n' || next == '\r'
+}
+
+// parseComplexMapping parses a mapping with complex keys (? marker).
+func (p *Parser) parseComplexMapping(baseIndent int) (map[string]interface{}, error) {
+	result := make(map[string]interface{})
+
+	for p.pos < p.length {
+		p.skipWhitespaceAndComments()
+		if p.pos >= p.length {
+			break
+		}
+
+		if p.isDocumentMarker() {
+			break
+		}
+
+		lineIndent := p.currentIndent()
+		if lineIndent < baseIndent {
+			break
+		}
+
+		if p.pos >= p.length || p.data[p.pos] != '?' {
+			break
+		}
+		if !p.isComplexKeyIndicator() {
+			break
+		}
+
+		p.advance() // skip '?'
+		p.skipSpaces()
+
+		// Parse key value
+		keyVal, err := p.parseValue(baseIndent + 1)
+		if err != nil {
+			return nil, fmt.Errorf("in complex key: %w", err)
+		}
+
+		key := stringifyValue(keyVal)
+
+		p.skipWhitespaceAndComments()
+
+		// Expect ':'
+		lineIndent = p.currentIndent()
+		if p.pos >= p.length || p.data[p.pos] != ':' {
+			return nil, fmt.Errorf("expected ':' after complex key at line %d", p.line)
+		}
+		p.advance() // skip ':'
+		p.skipSpaces()
+
+		// Parse value
+		var value interface{}
+		if p.pos < p.length && p.data[p.pos] != '\n' && p.data[p.pos] != '\r' && p.data[p.pos] != '#' {
+			value, err = p.parseValue(lineIndent)
+			if err != nil {
+				return nil, fmt.Errorf("in value for complex key: %w", err)
+			}
+		} else {
+			p.skipToNextLine()
+			p.skipWhitespaceAndComments()
+			if p.pos < p.length {
+				nextIndent := p.currentIndent()
+				if nextIndent > baseIndent {
+					value, err = p.parseValue(nextIndent)
+					if err != nil {
+						return nil, fmt.Errorf("in value for complex key: %w", err)
+					}
+				}
+			}
+		}
+
+		result[key] = value
+	}
+
+	return result, nil
+}
+
+// stringifyValue converts an interface{} value to a string for use as a map key.
+func stringifyValue(val interface{}) string {
+	switch v := val.(type) {
+	case nil:
+		return "null"
+	case string:
+		return v
+	case int64:
+		return strconv.FormatInt(v, 10)
+	case uint64:
+		return strconv.FormatUint(v, 10)
+	case float64:
+		return strconv.FormatFloat(v, 'f', -1, 64)
+	case bool:
+		if v {
+			return "true"
+		}
+		return "false"
+	case map[string]interface{}:
+		parts := make([]string, 0, len(v))
+		for k, val := range v {
+			parts = append(parts, fmt.Sprintf("%s: %s", k, stringifyValue(val)))
+		}
+		return "{" + joinWords(parts) + "}"
+	case []interface{}:
+		parts := make([]string, 0, len(v))
+		for i, item := range v {
+			parts = append(parts, fmt.Sprintf("%d: %s", i, stringifyValue(item)))
+		}
+		return "{" + strings.Join(parts, ", ") + "}"
+	default:
+		return fmt.Sprintf("%v", val)
+	}
 }
 
 // Special float values

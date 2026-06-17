@@ -36,6 +36,9 @@ func Unmarshal(data []byte, v interface{}) error {
 	}
 
 	p := NewParser(data)
+	p.skipDirectives()
+	p.skipWhitespaceAndComments()
+	p.skipDocumentMarkers()
 	return p.unmarshalValue(rv.Elem())
 }
 
@@ -83,6 +86,12 @@ func (p *Parser) unmarshalValueAtIndent(rv reflect.Value, baseIndent int) error 
 
 	// Route based on YAML type
 	switch c {
+	case '&':
+		return p.unmarshalAnchoredValue(rv, baseIndent)
+	case '*':
+		return p.unmarshalAlias(rv)
+	case '!':
+		return p.unmarshalTaggedValue(rv, baseIndent)
 	case '{':
 		return p.unmarshalFlowMapping(rv)
 	case '[':
@@ -197,12 +206,19 @@ func (p *Parser) unmarshalStruct(rv reflect.Value, baseIndent int) error {
 
 	// Get cached field info
 	fields := getFieldCache(structType)
+	var mergeValues []interface{}
 	first := true
+	setFields := make(map[string]bool)
 
 	for p.pos < p.length {
 		// Skip empty lines and comments
 		p.skipWhitespaceAndComments()
 		if p.pos >= p.length {
+			break
+		}
+
+		// Document markers end the current struct
+		if p.isDocumentMarker() {
 			break
 		}
 
@@ -236,14 +252,36 @@ func (p *Parser) unmarshalStruct(rv reflect.Value, baseIndent int) error {
 		}
 		p.advance() // skip ':'
 
+		p.skipSpaces()
+
+		// Handle merge keys
+		if key == "<<" {
+			var value interface{}
+			if p.pos < p.length && p.data[p.pos] != '\n' && p.data[p.pos] != '\r' && p.data[p.pos] != '#' {
+				value, err = p.parseValue(baseIndent)
+			} else {
+				p.skipToNextLine()
+				p.skipWhitespaceAndComments()
+				if p.pos < p.length {
+					nextIndent := p.currentIndent()
+					if nextIndent > baseIndent {
+						value, err = p.parseValue(nextIndent)
+					}
+				}
+			}
+			if err != nil {
+				return fmt.Errorf("in merge key: %w", err)
+			}
+			mergeValues = append(mergeValues, value)
+			continue
+		}
+
 		// Find matching struct field
 		fieldInfo, ok := fields.byName[key]
 		if !ok {
 			// Try lowercase match
 			fieldInfo, ok = fields.byName[strings.ToLower(key)]
 		}
-
-		p.skipSpaces()
 
 		if p.pos < p.length && p.data[p.pos] != '\n' && p.data[p.pos] != '\r' && p.data[p.pos] != '#' {
 			// Inline value
@@ -252,6 +290,7 @@ func (p *Parser) unmarshalStruct(rv reflect.Value, baseIndent int) error {
 				if err := p.unmarshalValueAtIndent(fieldVal, baseIndent); err != nil {
 					return fmt.Errorf("in field %q: %w", key, err)
 				}
+				setFields[key] = true
 			} else {
 				// Skip unknown field
 				if _, err := p.parseValue(baseIndent); err != nil {
@@ -271,11 +310,33 @@ func (p *Parser) unmarshalStruct(rv reflect.Value, baseIndent int) error {
 						if err := p.unmarshalValueAtIndent(fieldVal, nextIndent); err != nil {
 							return fmt.Errorf("in field %q: %w", key, err)
 						}
+						setFields[key] = true
 					} else {
 						// Skip unknown field
 						if _, err := p.parseValue(nextIndent); err != nil {
 							return err
 						}
+					}
+				}
+			}
+		}
+	}
+
+	// Apply merge keys to unset struct fields
+	for _, mv := range mergeValues {
+		if m, ok := mv.(map[string]interface{}); ok {
+			for k, v := range m {
+				if setFields[k] {
+					continue
+				}
+				fi, ok := fields.byName[k]
+				if !ok {
+					fi, ok = fields.byName[strings.ToLower(k)]
+				}
+				if ok {
+					fieldVal := rv.Field(fi.index)
+					if err := p.setScalarValue(fieldVal, v); err == nil {
+						setFields[k] = true
 					}
 				}
 			}
@@ -300,11 +361,16 @@ func (p *Parser) unmarshalMap(rv reflect.Value, baseIndent int) error {
 	}
 
 	valueType := mapType.Elem()
+	var mergeValues []interface{}
 	first := true
 
 	for p.pos < p.length {
 		p.skipWhitespaceAndComments()
 		if p.pos >= p.length {
+			break
+		}
+
+		if p.isDocumentMarker() {
 			break
 		}
 
@@ -338,6 +404,28 @@ func (p *Parser) unmarshalMap(rv reflect.Value, baseIndent int) error {
 
 		p.skipSpaces()
 
+		// Handle merge keys
+		if key == "<<" {
+			var value interface{}
+			if p.pos < p.length && p.data[p.pos] != '\n' && p.data[p.pos] != '\r' && p.data[p.pos] != '#' {
+				value, err = p.parseValue(baseIndent)
+			} else {
+				p.skipToNextLine()
+				p.skipWhitespaceAndComments()
+				if p.pos < p.length {
+					nextIndent := p.currentIndent()
+					if nextIndent > baseIndent {
+						value, err = p.parseValue(nextIndent)
+					}
+				}
+			}
+			if err != nil {
+				return fmt.Errorf("in merge key: %w", err)
+			}
+			mergeValues = append(mergeValues, value)
+			continue
+		}
+
 		// Create value and unmarshal
 		elemVal := reflect.New(valueType).Elem()
 
@@ -362,7 +450,29 @@ func (p *Parser) unmarshalMap(rv reflect.Value, baseIndent int) error {
 		rv.SetMapIndex(reflect.ValueOf(key), elemVal)
 	}
 
+	// Apply merge keys: only set keys that don't already exist
+	for _, mv := range mergeValues {
+		p.applyMergeToMap(rv, mv)
+	}
+
 	return nil
+}
+
+// applyMergeToMap applies merge key values to a map, skipping existing keys.
+func (p *Parser) applyMergeToMap(rv reflect.Value, mergeVal interface{}) {
+	switch v := mergeVal.(type) {
+	case map[string]interface{}:
+		for k, val := range v {
+			key := reflect.ValueOf(k)
+			if !rv.MapIndex(key).IsValid() {
+				rv.SetMapIndex(key, reflect.ValueOf(val))
+			}
+		}
+	case []interface{}:
+		for _, item := range v {
+			p.applyMergeToMap(rv, item)
+		}
+	}
 }
 
 // unmarshalBlockSequence unmarshals a YAML block sequence.
@@ -977,6 +1087,101 @@ func (p *Parser) setScalarValue(rv reflect.Value, val interface{}) error {
 	default:
 		return fmt.Errorf("yaml: cannot unmarshal into %s", rv.Type())
 	}
+}
+
+// unmarshalAnchoredValue reads an anchor name, then unmarshals the value.
+func (p *Parser) unmarshalAnchoredValue(rv reflect.Value, baseIndent int) error {
+	p.advance() // skip '&'
+
+	// Read anchor name
+	start := p.pos
+	for p.pos < p.length {
+		c := p.data[p.pos]
+		if c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == ':' || c == ',' || c == '}' || c == ']' {
+			break
+		}
+		p.advance()
+	}
+	anchorName := string(p.data[start:p.pos])
+	p.skipSpaces()
+
+	// For interface{} targets, parse to interface{} and store anchor
+	if rv.Kind() == reflect.Interface && rv.NumMethod() == 0 {
+		value, err := p.parseValue(baseIndent)
+		if err != nil {
+			return err
+		}
+		p.anchors[anchorName] = value
+		if value != nil {
+			rv.Set(reflect.ValueOf(value))
+		}
+		return nil
+	}
+
+	// For concrete types, unmarshal into the target
+	if err := p.unmarshalValueAtIndent(rv, baseIndent); err != nil {
+		return err
+	}
+
+	// Store a copy as interface{} for alias resolution
+	p.anchors[anchorName] = rv.Interface()
+	return nil
+}
+
+// unmarshalAlias looks up an anchor and sets the value.
+func (p *Parser) unmarshalAlias(rv reflect.Value) error {
+	p.advance() // skip '*'
+
+	// Read alias name
+	start := p.pos
+	for p.pos < p.length {
+		c := p.data[p.pos]
+		if c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == ':' || c == ',' || c == '}' || c == ']' {
+			break
+		}
+		p.advance()
+	}
+	aliasName := string(p.data[start:p.pos])
+
+	value, exists := p.anchors[aliasName]
+	if !exists {
+		return fmt.Errorf("undefined alias *%s at line %d", aliasName, p.line)
+	}
+
+	return p.setScalarValue(rv, value)
+}
+
+// unmarshalTaggedValue reads a tag, then unmarshals and coerces the value.
+func (p *Parser) unmarshalTaggedValue(rv reflect.Value, baseIndent int) error {
+	// Read the tag
+	start := p.pos
+	for p.pos < p.length {
+		c := p.data[p.pos]
+		if c == ' ' || c == '\t' || c == '\n' || c == '\r' {
+			break
+		}
+		p.advance()
+	}
+	tag := string(p.data[start:p.pos])
+	p.skipSpaces()
+
+	// For interface{} targets, parse and apply tag
+	if rv.Kind() == reflect.Interface && rv.NumMethod() == 0 {
+		value, err := p.parseValue(baseIndent)
+		if err != nil {
+			return err
+		}
+		result := p.applyTag(tag, value)
+		if result != nil {
+			rv.Set(reflect.ValueOf(result))
+		} else {
+			rv.Set(reflect.Zero(rv.Type()))
+		}
+		return nil
+	}
+
+	// For concrete types, unmarshal directly (tags mostly affect type interpretation)
+	return p.unmarshalValueAtIndent(rv, baseIndent)
 }
 
 // Field cache for struct reflection
