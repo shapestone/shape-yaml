@@ -98,6 +98,15 @@ func (p *Parser) unmarshalValueAtIndent(rv reflect.Value, baseIndent int) error 
 		}
 		// Negative number or plain string
 		return p.unmarshalScalar(rv)
+	case '|', '>':
+		if p.isBlockScalarIndicator() {
+			val, err := p.parseBlockScalar(c == '>')
+			if err != nil {
+				return err
+			}
+			return p.setScalarValue(rv, val)
+		}
+		return p.unmarshalScalar(rv)
 	case '~':
 		// Explicit null
 		val, err := p.parseScalar()
