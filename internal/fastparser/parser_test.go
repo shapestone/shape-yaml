@@ -174,3 +174,140 @@ func TestUnmarshal_FlowSequence(t *testing.T) {
 		t.Errorf("items = %v, want %v", items, expected)
 	}
 }
+
+func TestParser_ColonInDoubleQuotedString(t *testing.T) {
+	data := []byte(`version: "2.0"
+repositories:
+  - name: "my-repo"
+    framework: "Next.js 15 + Nx 20 monorepo (3 apps: shop, guest, briefcase)"
+subdomains:
+  - name: "Ordering"
+    sources:
+      - repo: "my-repo"
+        paths:
+          - "src/api/orders/"
+`)
+
+	p := NewParser(data)
+	val, err := p.Parse()
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+
+	m, ok := val.(map[string]interface{})
+	if !ok {
+		t.Fatalf("Expected map, got %T", val)
+	}
+
+	repos, ok := m["repositories"].([]interface{})
+	if !ok || len(repos) != 1 {
+		t.Fatalf("Expected 1 repository, got %v", m["repositories"])
+	}
+	repo := repos[0].(map[string]interface{})
+	if repo["framework"] != "Next.js 15 + Nx 20 monorepo (3 apps: shop, guest, briefcase)" {
+		t.Errorf("framework = %v", repo["framework"])
+	}
+
+	subs, ok := m["subdomains"].([]interface{})
+	if !ok || len(subs) != 1 {
+		t.Fatalf("Expected 1 subdomain, got %v", m["subdomains"])
+	}
+}
+
+func TestUnmarshal_ColonInDoubleQuotedString(t *testing.T) {
+	type Source struct {
+		Repo  string   `yaml:"repo"`
+		Paths []string `yaml:"paths"`
+	}
+	type Subdomain struct {
+		Name    string   `yaml:"name"`
+		Sources []Source `yaml:"sources"`
+	}
+	type ContextMap struct {
+		Subdomains []Subdomain `yaml:"subdomains"`
+	}
+
+	data := []byte(`version: "2.0"
+repositories:
+  - name: "my-repo"
+    framework: "Next.js 15 + Nx 20 monorepo (3 apps: shop, guest, briefcase)"
+subdomains:
+  - name: "Ordering"
+    sources:
+      - repo: "my-repo"
+        paths:
+          - "src/api/orders/"
+`)
+
+	var cm ContextMap
+	err := Unmarshal(data, &cm)
+	if err != nil {
+		t.Fatalf("Unmarshal error: %v", err)
+	}
+
+	if len(cm.Subdomains) != 1 {
+		t.Fatalf("Expected 1 subdomain, got %d", len(cm.Subdomains))
+	}
+	if cm.Subdomains[0].Name != "Ordering" {
+		t.Errorf("Subdomain name = %q, want Ordering", cm.Subdomains[0].Name)
+	}
+	if len(cm.Subdomains[0].Sources) != 1 {
+		t.Fatalf("Expected 1 source, got %d", len(cm.Subdomains[0].Sources))
+	}
+	if cm.Subdomains[0].Sources[0].Repo != "my-repo" {
+		t.Errorf("Source repo = %q, want my-repo", cm.Subdomains[0].Sources[0].Repo)
+	}
+}
+
+func TestParser_ColonInSingleQuotedString(t *testing.T) {
+	data := []byte(`key: 'value: with colon'
+other: works`)
+
+	p := NewParser(data)
+	val, err := p.Parse()
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+
+	m := val.(map[string]interface{})
+	if m["key"] != "value: with colon" {
+		t.Errorf("key = %v, want 'value: with colon'", m["key"])
+	}
+	if m["other"] != "works" {
+		t.Errorf("other = %v, want 'works'", m["other"])
+	}
+}
+
+func TestParser_ColonInQuotedKey(t *testing.T) {
+	data := []byte(`"key: name": value`)
+
+	p := NewParser(data)
+	val, err := p.Parse()
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+
+	m := val.(map[string]interface{})
+	if m["key: name"] != "value" {
+		t.Errorf("got %v", m)
+	}
+}
+
+func TestParser_URLInQuotedString(t *testing.T) {
+	data := []byte(`url: "https://example.com:8080/path"
+name: test`)
+
+	p := NewParser(data)
+	val, err := p.Parse()
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+
+	m := val.(map[string]interface{})
+	if m["url"] != "https://example.com:8080/path" {
+		t.Errorf("url = %v", m["url"])
+	}
+	if m["name"] != "test" {
+		t.Errorf("name = %v", m["name"])
+	}
+}
