@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.6] - 2026-06-17
+
+### Fixed
+- Fast parser (`Unmarshal`) now correctly handles colons inside double-quoted and single-quoted strings. Previously, a value like `"3 apps: shop, guest, briefcase"` would cause the parser to misidentify the quoted value as a mapping key, resulting in parse errors or incorrect results.
+
 ## [0.9.1] - 2025-12-28
 
 ### Changed
