@@ -68,6 +68,13 @@ func (p *Parser) parseValue(indent int) (interface{}, error) {
 		return p.parseFlowSequence()
 	}
 
+	// Block scalars (| or >)
+	if c == '|' || c == '>' {
+		if p.isBlockScalarIndicator() {
+			return p.parseBlockScalar(c == '>')
+		}
+	}
+
 	// Block sequence (starts with -)
 	if c == '-' && p.isSequenceIndicator() {
 		return p.parseBlockSequence(indent)
@@ -546,6 +553,221 @@ func (p *Parser) parseScalar() (interface{}, error) {
 
 	value := trimBytes(p.data[start:p.pos])
 	return p.interpretScalar(value), nil
+}
+
+// isBlockScalarIndicator checks if current position is a block scalar indicator
+// (| or >) followed only by an optional chomping indicator and then newline/EOF.
+func (p *Parser) isBlockScalarIndicator() bool {
+	savedPos := p.pos
+	defer func() { p.pos = savedPos }()
+
+	c := p.data[p.pos]
+	if c != '|' && c != '>' {
+		return false
+	}
+	p.pos++
+
+	// Optional chomping/indentation indicators: -, +, or digit
+	for p.pos < p.length {
+		c := p.data[p.pos]
+		if c == '-' || c == '+' || (c >= '0' && c <= '9') {
+			p.pos++
+			continue
+		}
+		break
+	}
+
+	// Skip spaces
+	for p.pos < p.length && (p.data[p.pos] == ' ' || p.data[p.pos] == '\t') {
+		p.pos++
+	}
+
+	// Skip optional comment
+	if p.pos < p.length && p.data[p.pos] == '#' {
+		for p.pos < p.length && p.data[p.pos] != '\n' && p.data[p.pos] != '\r' {
+			p.pos++
+		}
+	}
+
+	// Must be at newline or EOF
+	return p.pos >= p.length || p.data[p.pos] == '\n' || p.data[p.pos] == '\r'
+}
+
+// parseBlockScalar parses a YAML block scalar (literal | or folded >).
+func (p *Parser) parseBlockScalar(folded bool) (interface{}, error) {
+	p.advance() // skip | or >
+
+	// Parse chomping indicator
+	chompMode := "clip" // default
+	if p.pos < p.length {
+		if p.data[p.pos] == '-' {
+			chompMode = "strip"
+			p.advance()
+		} else if p.data[p.pos] == '+' {
+			chompMode = "keep"
+			p.advance()
+		}
+	}
+
+	// Skip to end of indicator line
+	p.skipToNextLine()
+
+	// Determine block indentation from first content line
+	contentIndent := -1
+	scanPos := p.pos
+	for scanPos < p.length {
+		if p.data[scanPos] == '\n' || p.data[scanPos] == '\r' {
+			scanPos++
+			continue
+		}
+		// Count leading spaces
+		indent := 0
+		for scanPos+indent < p.length && p.data[scanPos+indent] == ' ' {
+			indent++
+		}
+		if scanPos+indent < p.length && p.data[scanPos+indent] != '\n' && p.data[scanPos+indent] != '\r' {
+			contentIndent = indent
+			break
+		}
+		// Blank line — skip it
+		scanPos += indent
+		if scanPos < p.length {
+			scanPos++
+		}
+	}
+
+	if contentIndent <= 0 {
+		// No content lines — empty block scalar
+		return "", nil
+	}
+
+	// Collect content lines
+	var lines []string
+	trailingNewlines := 0
+
+	for p.pos < p.length {
+		// Check if this line is part of the block
+		lineStart := p.pos
+		indent := 0
+		for p.pos < p.length && p.data[p.pos] == ' ' {
+			indent++
+			p.pos++
+		}
+
+		// Empty/blank line
+		if p.pos >= p.length || p.data[p.pos] == '\n' || p.data[p.pos] == '\r' {
+			trailingNewlines++
+			if p.pos < p.length {
+				p.advance() // skip newline
+			}
+			continue
+		}
+
+		// Line with less indentation than the block — we're done
+		if indent < contentIndent {
+			p.pos = lineStart
+			break
+		}
+
+		// Flush any pending blank lines (they're part of the content)
+		for trailingNewlines > 0 {
+			lines = append(lines, "")
+			trailingNewlines--
+		}
+
+		// Collect the line content (strip the block indentation)
+		start := p.pos
+		for p.pos < p.length && p.data[p.pos] != '\n' && p.data[p.pos] != '\r' {
+			p.advance()
+		}
+		line := string(p.data[start:p.pos])
+
+		// Preserve extra indentation beyond contentIndent
+		if indent > contentIndent {
+			line = string(p.data[lineStart+contentIndent:start]) + line
+		}
+
+		lines = append(lines, line)
+
+		// Consume the newline
+		if p.pos < p.length {
+			p.advance()
+		}
+	}
+
+	// Build the result string
+	var content string
+	if folded {
+		// Fold: join consecutive non-empty lines with spaces, blank lines become newlines
+		var parts []string
+		var current []string
+		for _, line := range lines {
+			if line == "" {
+				if len(current) > 0 {
+					parts = append(parts, joinWords(current))
+					current = nil
+				}
+				parts = append(parts, "")
+			} else {
+				current = append(current, line)
+			}
+		}
+		if len(current) > 0 {
+			parts = append(parts, joinWords(current))
+		}
+		content = joinParts(parts)
+	} else {
+		// Literal: preserve newlines
+		content = joinLines(lines)
+	}
+
+	// Apply chomping
+	switch chompMode {
+	case "strip":
+		// No trailing newline
+	case "keep":
+		content += "\n"
+		for i := 0; i < trailingNewlines; i++ {
+			content += "\n"
+		}
+	default: // clip
+		content += "\n"
+	}
+
+	return content, nil
+}
+
+func joinLines(lines []string) string {
+	if len(lines) == 0 {
+		return ""
+	}
+	result := lines[0]
+	for _, line := range lines[1:] {
+		result += "\n" + line
+	}
+	return result
+}
+
+func joinWords(words []string) string {
+	if len(words) == 0 {
+		return ""
+	}
+	result := words[0]
+	for _, w := range words[1:] {
+		result += " " + w
+	}
+	return result
+}
+
+func joinParts(parts []string) string {
+	if len(parts) == 0 {
+		return ""
+	}
+	result := parts[0]
+	for _, part := range parts[1:] {
+		result += "\n" + part
+	}
+	return result
 }
 
 // parseDoubleQuotedString parses a double-quoted string.
