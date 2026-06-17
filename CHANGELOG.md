@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] - 2026-06-17
+
+### Added
+- Fast parser now supports all YAML 1.2 advanced features, achieving full parity with the AST parser:
+  - **Anchors & aliases** (`&name` / `*name`) for value reuse across documents
+  - **Merge keys** (`<<: *base`) for configuration inheritance, including sequence-of-maps merges
+  - **Tags** (`!!str`, `!!int`, `!!float`, `!!bool`, `!!null`) for explicit type coercion
+  - **Complex keys** (`?` marker) for non-scalar mapping keys
+  - **Document markers** (`---` / `...`) support in both `Parse()` and `Unmarshal()` paths
+  - **Directives** (`%YAML`, `%TAG`) are now properly skipped in both parser paths
+  - **Multi-document parsing** via `ParseMultiDoc()` in the fast parser
+- Unified parity test suite (`pkg/yaml/parity_test.go`) with ~75 test cases that run identical YAML inputs through both the AST and fast parser paths, ensuring consistent results without duplicating tests
+
 ## [0.9.7] - 2026-06-17
 
 ### Fixed
@@ -140,5 +153,8 @@ Production-ready release with:
 - ✅ Comprehensive documentation
 - ✅ Compatible with Kubernetes, Docker Compose, GitHub Actions, Helm
 
+[0.10.0]: https://github.com/shapestone/shape-yaml/releases/tag/v0.10.0
+[0.9.7]: https://github.com/shapestone/shape-yaml/releases/tag/v0.9.7
+[0.9.6]: https://github.com/shapestone/shape-yaml/releases/tag/v0.9.6
 [0.9.1]: https://github.com/shapestone/shape-yaml/releases/tag/v0.9.1
 [0.9.0]: https://github.com/shapestone/shape-yaml/releases/tag/v0.9.0
