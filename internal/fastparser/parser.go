@@ -90,6 +90,39 @@ func (p *Parser) looksLikeMapping() bool {
 
 	for p.pos < p.length {
 		c := p.data[p.pos]
+
+		// Skip over quoted strings — colons inside quotes are not mapping indicators
+		if c == '"' {
+			p.pos++
+			for p.pos < p.length {
+				if p.data[p.pos] == '\\' {
+					p.pos += 2
+					continue
+				}
+				if p.data[p.pos] == '"' {
+					p.pos++
+					break
+				}
+				p.pos++
+			}
+			continue
+		}
+		if c == '\'' {
+			p.pos++
+			for p.pos < p.length {
+				if p.data[p.pos] == '\'' && p.pos+1 < p.length && p.data[p.pos+1] == '\'' {
+					p.pos += 2
+					continue
+				}
+				if p.data[p.pos] == '\'' {
+					p.pos++
+					break
+				}
+				p.pos++
+			}
+			continue
+		}
+
 		if c == ':' {
 			// Check if followed by space, newline, or EOF
 			if p.pos+1 >= p.length {
