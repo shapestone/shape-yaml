@@ -624,6 +624,108 @@ func TestMarshalArray(t *testing.T) {
 	}
 }
 
+// TestMarshal_MapKeyQuoting tests that map keys containing YAML-special characters are quoted
+func TestMarshal_MapKeyQuoting(t *testing.T) {
+	tests := []struct {
+		name     string
+		key      string
+		contains string
+	}{
+		{
+			name:     "key with colon-space",
+			key:      "slots: renders",
+			contains: `"slots: renders":`,
+		},
+		{
+			name:     "key with hash",
+			key:      "item #1",
+			contains: `"item #1":`,
+		},
+		{
+			name:     "key with braces",
+			key:      "{key}",
+			contains: `"{key}":`,
+		},
+		{
+			name:     "key with brackets",
+			key:      "[index]",
+			contains: `"[index]":`,
+		},
+		{
+			name:     "key that looks like bool",
+			key:      "true",
+			contains: `"true":`,
+		},
+		{
+			name:     "key that looks like number",
+			key:      "123",
+			contains: `"123":`,
+		},
+		{
+			name:     "key that looks like null",
+			key:      "null",
+			contains: `"null":`,
+		},
+		{
+			name:     "simple key - no quotes needed",
+			key:      "name",
+			contains: "name:",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := map[string]interface{}{tt.key: "value"}
+			result, err := Marshal(m)
+			if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+
+			output := string(result)
+			if !strings.Contains(output, tt.contains) {
+				t.Errorf("Expected output to contain %q, got: %s", tt.contains, output)
+			}
+		})
+	}
+}
+
+// TestMarshal_MapKeyQuoting_RoundTrip tests that maps with special-character keys survive marshal/unmarshal
+func TestMarshal_MapKeyQuoting_RoundTrip(t *testing.T) {
+	tests := []struct {
+		name string
+		key  string
+	}{
+		{name: "colon-space", key: "key: value"},
+		{name: "hash", key: "item #2"},
+		{name: "braces", key: "{flow}"},
+		{name: "brackets", key: "[seq]"},
+		{name: "pipe", key: "a|b"},
+		{name: "greater-than", key: "a>b"},
+		{name: "backtick", key: "`code`"},
+		{name: "double-quote in key", key: `say "hi"`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			original := map[string]string{tt.key: "val"}
+			result, err := Marshal(original)
+			if err != nil {
+				t.Fatalf("Marshal error: %v", err)
+			}
+
+			var decoded map[string]string
+			err = Unmarshal(result, &decoded)
+			if err != nil {
+				t.Fatalf("Unmarshal error on input:\n%s\nerror: %v", string(result), err)
+			}
+
+			if decoded[tt.key] != "val" {
+				t.Errorf("Round-trip failed for key %q: got map %v", tt.key, decoded)
+			}
+		})
+	}
+}
+
 // TestIsComplexType tests isComplexType function
 func TestIsComplexType(t *testing.T) {
 	type Simple struct {
