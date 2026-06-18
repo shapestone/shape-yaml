@@ -464,8 +464,15 @@ func buildYAMLMapEncoder(t reflect.Type) yamlEncoderFunc {
 			// Write indentation
 			buf = appendIndent(buf, indent)
 
-			// Write key
-			buf = append(buf, pairs[i].key...)
+			// Write key (quote if it contains YAML-special characters)
+			key := pairs[i].key
+			if needsQuotingFast(key) {
+				buf = append(buf, '"')
+				buf = appendEscapedYAMLString(buf, key)
+				buf = append(buf, '"')
+			} else {
+				buf = append(buf, key...)
+			}
 			buf = append(buf, ':', ' ')
 
 			// Determine if value is complex
