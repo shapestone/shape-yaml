@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `yaml.Validate` accepts a leading UTF-8 BOM.
 - `yaml.Validate` rejects a tab in the indentation of a comment-only line (`a: 1\n\t# c`), as shape v0.4.0 did. A line holding only whitespace is still accepted.
 - `Unmarshal` now returns an error for `a: x\n  y: z` (a more-indented line of the form `key: value` after a plain scalar), which is invalid YAML. It used to return `{"a":"x"}` and silently drop the rest.
+- A valueless explicit key inside a sequence (`- ? a`, or `k:\n  - ? a`) is now an error ("expected ':' after complex key"), in `Validate` and `Unmarshal`. v0.10.1 silently returned `[{}]` for it, losing the key.
 - Implicit mapping keys (a key written without `?`) must fit on one line and be at most 1,024 bytes, as YAML 1.2 requires. This also bounds how far the parser looks ahead for a `:`. A longer "key" is treated as a plain scalar, so for such input `Validate` and `Unmarshal` can differ from `yaml.v3`, which reports an error.
 - Nesting deeper than 10,000 levels (block or flow) is now an error in the fast parser, so `Validate` and `Unmarshal` fail with a message instead of relying on the Go stack limit.
 
