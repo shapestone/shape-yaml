@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.2] - 2026-10-29
+
 ### Fixed
 - `yaml.Validate` now accepts plain multi-word scalars and the other valid inputs the AST-based validator rejected: `name: John Smith`, `- hello world`, `1: a`, `yes: 1`, `a: 2001-01-01`, `a: 010`, a bare scalar document, and multi-document streams (`a: 1\n---\nb: 2`). It now runs on the fast parser that `Unmarshal` uses, so these inputs are accepted by both. The two do not always agree on malformed input: `Validate` is stricter (see below) and goes through the multi-document entry point, and it is not a complete YAML 1.2 validator. For example `Validate` still accepts a stray `}` or `]`, `[1,,2]` and `a: @x`, and ` ? ? : :` is accepted by `Validate` but rejected by `Unmarshal`.
 - `yaml.Validate` rejects tab indentation and unterminated quoted strings again (as shape v0.4.0 did); the AST-based validator accepted both.
@@ -186,6 +188,8 @@ Production-ready release with:
 - ✅ Comprehensive documentation
 - ✅ Compatible with Kubernetes, Docker Compose, GitHub Actions, Helm
 
+[Unreleased]: https://github.com/shapestone/shape-yaml/compare/v0.10.2...HEAD
+[0.10.2]: https://github.com/shapestone/shape-yaml/releases/tag/v0.10.2
 [0.10.0]: https://github.com/shapestone/shape-yaml/releases/tag/v0.10.0
 [0.9.7]: https://github.com/shapestone/shape-yaml/releases/tag/v0.9.7
 [0.9.6]: https://github.com/shapestone/shape-yaml/releases/tag/v0.9.6
