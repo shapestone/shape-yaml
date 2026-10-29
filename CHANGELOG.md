@@ -31,6 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `yaml.ValidateReader(io.Reader)`, the reader variant of `Validate` (reads the input into memory; wrap in `io.LimitReader` to cap size).
 
 ### Known issues
+- A block sequence written as the value of an explicit key (`? a\n: - x\n  - y`) is folded into the plain scalar `"x - y"` instead of being parsed as a list.
+- `yaml.Validate` is a syntax gate, not a full YAML 1.2 validator: it accepts some malformed input (for example a stray `}` or `]`, `[1,,2]`, `a: @x`) and rejects a few valid forms (`a: {b}`, a bare `? a`). Do not rely on it to prove a document is valid YAML.
 - A `#` that is not preceded by white space is part of a plain scalar in YAML, but the fast parser ends the scalar there: `Unmarshal` of `k: a#b` returns `a`, and `url: http://x.com/p#frag` loses `#frag`. This predates this release (it is the same in v0.10.1). `Validate`'s verdict is not affected.
 
 ### Notes
