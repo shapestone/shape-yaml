@@ -39,6 +39,7 @@ func Unmarshal(data []byte, v interface{}) error {
 	p.skipDirectives()
 	p.skipWhitespaceAndComments()
 	p.skipDocumentMarkers()
+	p.owner = -1 // a root scalar may continue at any indent
 	return p.unmarshalValue(rv.Elem())
 }
 
@@ -109,11 +110,7 @@ func (p *Parser) unmarshalValueAtIndent(rv reflect.Value, baseIndent int) error 
 		return p.unmarshalScalar(rv)
 	case '|', '>':
 		if p.isBlockScalarIndicator() {
-			val, err := p.parseBlockScalar(c == '>')
-			if err != nil {
-				return err
-			}
-			return p.setScalarValue(rv, val)
+			return p.setScalarValue(rv, p.parseBlockScalar(c == '>'))
 		}
 		return p.unmarshalScalar(rv)
 	case '~':
@@ -147,8 +144,17 @@ func (p *Parser) isQuotedKeyMapping() bool {
 	quote := p.data[p.pos]
 	p.pos++ // skip opening quote
 
-	for p.pos < p.length {
+	// A quoted implicit key stays on one line and is at most maxKeyLen bytes.
+	limit := savedPos + maxKeyLen
+	if limit > p.length {
+		limit = p.length
+	}
+
+	for p.pos < limit {
 		c := p.data[p.pos]
+		if c == '\n' || c == '\r' {
+			return false
+		}
 		if c == quote {
 			if quote == '\'' && p.pos+1 < p.length && p.data[p.pos+1] == '\'' {
 				// Escaped single quote
@@ -253,6 +259,7 @@ func (p *Parser) unmarshalStruct(rv reflect.Value, baseIndent int) error {
 		p.advance() // skip ':'
 
 		p.skipSpaces()
+		p.owner = baseIndent
 
 		// Handle merge keys
 		if key == "<<" {
@@ -270,7 +277,7 @@ func (p *Parser) unmarshalStruct(rv reflect.Value, baseIndent int) error {
 				}
 			}
 			if err != nil {
-				return fmt.Errorf("in merge key: %w", err)
+				return wrapf(err, "in merge key")
 			}
 			mergeValues = append(mergeValues, value)
 			continue
@@ -288,7 +295,7 @@ func (p *Parser) unmarshalStruct(rv reflect.Value, baseIndent int) error {
 			if ok {
 				fieldVal := rv.Field(fieldInfo.index)
 				if err := p.unmarshalValueAtIndent(fieldVal, baseIndent); err != nil {
-					return fmt.Errorf("in field %q: %w", key, err)
+					return wrapf(err, "in field %q", key)
 				}
 				setFields[key] = true
 			} else {
@@ -304,11 +311,11 @@ func (p *Parser) unmarshalStruct(rv reflect.Value, baseIndent int) error {
 
 			if p.pos < p.length {
 				nextIndent := p.currentIndent()
-				if nextIndent > baseIndent {
+				if nextIndent > baseIndent || p.indentlessSequenceAt(nextIndent, baseIndent) {
 					if ok {
 						fieldVal := rv.Field(fieldInfo.index)
 						if err := p.unmarshalValueAtIndent(fieldVal, nextIndent); err != nil {
-							return fmt.Errorf("in field %q: %w", key, err)
+							return wrapf(err, "in field %q", key)
 						}
 						setFields[key] = true
 					} else {
@@ -403,6 +410,7 @@ func (p *Parser) unmarshalMap(rv reflect.Value, baseIndent int) error {
 		p.advance()
 
 		p.skipSpaces()
+		p.owner = baseIndent
 
 		// Handle merge keys
 		if key == "<<" {
@@ -420,7 +428,7 @@ func (p *Parser) unmarshalMap(rv reflect.Value, baseIndent int) error {
 				}
 			}
 			if err != nil {
-				return fmt.Errorf("in merge key: %w", err)
+				return wrapf(err, "in merge key")
 			}
 			mergeValues = append(mergeValues, value)
 			continue
@@ -439,7 +447,7 @@ func (p *Parser) unmarshalMap(rv reflect.Value, baseIndent int) error {
 
 			if p.pos < p.length {
 				nextIndent := p.currentIndent()
-				if nextIndent > baseIndent {
+				if nextIndent > baseIndent || p.indentlessSequenceAt(nextIndent, baseIndent) {
 					if err := p.unmarshalValueAtIndent(elemVal, nextIndent); err != nil {
 						return err
 					}
@@ -533,6 +541,7 @@ func (p *Parser) unmarshalSlice(rv reflect.Value, baseIndent int) error {
 
 		p.advance() // skip '-'
 		p.skipSpaces()
+		p.owner = baseIndent
 
 		// Create element and unmarshal
 		elemVal := reflect.New(elemType).Elem()
@@ -602,6 +611,7 @@ func (p *Parser) unmarshalArray(rv reflect.Value, baseIndent int) error {
 
 		p.advance() // skip '-'
 		p.skipSpaces()
+		p.owner = baseIndent
 
 		elemVal := rv.Index(idx)
 
@@ -1262,4 +1272,11 @@ func buildFieldCache(t reflect.Type) *fieldCache {
 	}
 
 	return fc
+}
+
+// indentlessSequenceAt reports whether p.pos starts a block sequence entry at the
+// same indent as the mapping key that owns it ("a:\n- b"), which YAML allows as
+// the value of a mapping key.
+func (p *Parser) indentlessSequenceAt(indent, baseIndent int) bool {
+	return indent == baseIndent && p.isSequenceIndicator() && !p.isDocumentMarker()
 }

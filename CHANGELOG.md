@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.10.2] - 2026-10-29
+
+### Fixed
+- `yaml.Validate` now accepts plain multi-word scalars and the other valid inputs the AST-based validator rejected: `name: John Smith`, `- hello world`, `1: a`, `yes: 1`, `a: 2001-01-01`, `a: 010`, a bare scalar document, and multi-document streams (`a: 1\n---\nb: 2`). It now runs on the fast parser that `Unmarshal` uses, so these inputs are accepted by both. The two do not always agree on malformed input: `Validate` is stricter (see below) and goes through the multi-document entry point, and it is not a complete YAML 1.2 validator. For example `Validate` still accepts a stray `}` or `]`, `[1,,2]` and `a: @x`, and ` ? ? : :` is accepted by `Validate` but rejected by `Unmarshal`.
+- `yaml.Validate` rejects tab indentation and unterminated quoted strings again (as shape v0.4.0 did); the AST-based validator accepted both.
+- Plain scalars that continue onto the next line are folded as YAML 1.2 and yaml.v3 do, in mapping values and sequence items, indented or not. Before, the continuation was silently dropped and parsing carried on from the wrong place: `a:\n- x\n  cont\nb: 1` returned `{"a":["x"]}` and lost `b`. Blank lines between the parts become newlines; a comment ends the scalar. A continuation line of the form `key: value` is an error, as in YAML (`a:\n- b\n  c: d`, `a: 1\n  b: 2`), so both `Validate` and `Unmarshal` now reject those.
+- Hostile inputs no longer take quadratic time. Reproducible cases that took seconds or more (160 KB of `- '` took 21 s; `- "` and `- |` took several seconds) now take well under a second, and a timing test covers 16 such patterns for `Validate` and `Unmarshal`. The causes were: rescanning the line start at every nesting level; scanning to the end of a long line (or the end of input, through an unterminated quote) to decide whether a value was a mapping key, which is now bounded to one line and 1,024 bytes as YAML 1.2 specifies for implicit keys; quadratic string concatenation for block scalars; and a depth error that was re-wrapped at every level it unwound through. This is tested on specific patterns, not proven for every input.
+- Keys containing a colon that is not followed by white space are valid again: `http://x.com: 1`, `12:30: lunch`, `a:b: c`. The fast parser ended a plain key at any `:`, so the new `a: b: c` check rejected them; a colon now separates key and value only when followed by a space, tab or line end. This also fixes such keys in `Unmarshal`.
+- Indentless block sequences (`a:\n- b\n- c`, the usual Kubernetes and CI layout) are accepted by `Validate` and `Unmarshal` (maps, structs and `interface{}`).
+
+- Explicit mapping keys (`? a\n: b`) work in `Validate` and `Unmarshal` also when mixed with ordinary keys (`? a\n: b\nc: d`), nested under a key, and inside sequences (`- ? a\n  : b`). Before, the `: b` line was not treated specially, and a mapping with both kinds of key lost the ordinary entries. A stream with an empty document (`a: 1\n---\n---\nb: 2`) is valid.
+
+### Changed
+- `yaml.Validate` rejects duplicate mapping keys (`a: 1\na: 2`), block and flow, per YAML 1.2 §3.2.1.1. shape v0.4.0 accepted them.
+- `yaml.Validate` rejects `a: b: c` (a block mapping on the same line as its parent key) and content left after a top-level block or flow collection (`- a\nb: c`).
+- `yaml.Validate` accepts a leading UTF-8 BOM.
+- `yaml.Validate` rejects a tab in the indentation of a comment-only line (`a: 1\n\t# c`), as shape v0.4.0 did. A line holding only whitespace is still accepted.
+- `Unmarshal` now returns an error for `a: x\n  y: z` (a more-indented line of the form `key: value` after a plain scalar), which is invalid YAML. It used to return `{"a":"x"}` and silently drop the rest.
+- A valueless explicit key inside a sequence (`- ? a`, or `k:\n  - ? a`) is now an error ("expected ':' after complex key"), in `Validate` and `Unmarshal`. v0.10.1 silently returned `[{}]` for it, losing the key.
+- Implicit mapping keys (a key written without `?`) must fit on one line and be at most 1,024 bytes, as YAML 1.2 requires. This also bounds how far the parser looks ahead for a `:`. A longer "key" is treated as a plain scalar, so for such input `Validate` and `Unmarshal` can differ from `yaml.v3`, which reports an error.
+- Nesting deeper than 10,000 levels (block or flow) is now an error in the fast parser, so `Validate` and `Unmarshal` fail with a message instead of relying on the Go stack limit.
+
+### Added
+- `yaml.ValidateReader(io.Reader)`, the reader variant of `Validate` (reads the input into memory; wrap in `io.LimitReader` to cap size).
+
+### Known issues
+- A block sequence written as the value of an explicit key (`? a\n: - x\n  - y`) is folded into the plain scalar `"x - y"` instead of being parsed as a list.
+- `yaml.Validate` is a syntax gate, not a full YAML 1.2 validator: it accepts some malformed input (for example a stray `}` or `]`, `[1,,2]`, `a: @x`) and rejects a few valid forms (`a: {b}`, a bare `? a`). Do not rely on it to prove a document is valid YAML.
+- A `#` that is not preceded by white space is part of a plain scalar in YAML, but the fast parser ends the scalar there: `Unmarshal` of `k: a#b` returns `a`, and `url: http://x.com/p#frag` loses `#frag`. This predates this release (it is the same in v0.10.1). `Validate`'s verdict is not affected.
+
+### Notes
+- `yaml.Parse` and `yaml.ParseMultiDoc` still use the tokenizer/AST parser and still reject plain multi-word scalars. Fixing them means unifying the parsers, planned for v0.11.0.
+
 ## [0.10.0] - 2026-06-17
 
 ### Added
@@ -153,6 +188,8 @@ Production-ready release with:
 - ✅ Comprehensive documentation
 - ✅ Compatible with Kubernetes, Docker Compose, GitHub Actions, Helm
 
+[Unreleased]: https://github.com/shapestone/shape-yaml/compare/v0.10.2...HEAD
+[0.10.2]: https://github.com/shapestone/shape-yaml/releases/tag/v0.10.2
 [0.10.0]: https://github.com/shapestone/shape-yaml/releases/tag/v0.10.0
 [0.9.7]: https://github.com/shapestone/shape-yaml/releases/tag/v0.9.7
 [0.9.6]: https://github.com/shapestone/shape-yaml/releases/tag/v0.9.6
