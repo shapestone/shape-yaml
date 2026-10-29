@@ -33,7 +33,14 @@ type Parser struct {
 	// Unmarshal leaves it off and stays lenient.
 	strict    bool
 	strictErr error
+
+	lsStart, lsPos int // lineStartOf cache
+	depth          int // current nesting depth
 }
+
+// maxDepth bounds nesting so hostile input fails with an error instead of
+// exhausting the stack.
+const maxDepth = 10000
 
 // NewParser creates a new fast parser for the given data.
 func NewParser(data []byte) *Parser {
@@ -151,6 +158,11 @@ func (p *Parser) ParseMultiDoc() ([]interface{}, error) {
 
 // parseValue parses any YAML value at the given indentation level.
 func (p *Parser) parseValue(indent int) (interface{}, error) {
+	p.depth++
+	defer func() { p.depth-- }()
+	if p.depth > maxDepth {
+		return nil, fmt.Errorf("nesting deeper than %d levels at line %d", maxDepth, p.line)
+	}
 	p.skipWhitespaceAndComments()
 	if p.pos >= p.length {
 		return nil, nil
@@ -479,6 +491,11 @@ func (p *Parser) parseBlockSequence(baseIndent int) ([]interface{}, error) {
 
 // parseFlowMapping parses a flow-style mapping: {key: value, ...}
 func (p *Parser) parseFlowMapping() (map[string]interface{}, error) {
+	p.depth++
+	defer func() { p.depth-- }()
+	if p.depth > maxDepth {
+		return nil, fmt.Errorf("nesting deeper than %d levels at line %d", maxDepth, p.line)
+	}
 	if p.pos >= p.length || p.data[p.pos] != '{' {
 		return nil, errors.New("expected '{'")
 	}
@@ -544,6 +561,11 @@ func (p *Parser) parseFlowMapping() (map[string]interface{}, error) {
 
 // parseFlowSequence parses a flow-style sequence: [item1, item2, ...]
 func (p *Parser) parseFlowSequence() ([]interface{}, error) {
+	p.depth++
+	defer func() { p.depth-- }()
+	if p.depth > maxDepth {
+		return nil, fmt.Errorf("nesting deeper than %d levels at line %d", maxDepth, p.line)
+	}
 	if p.pos >= p.length || p.data[p.pos] != '[' {
 		return nil, errors.New("expected '['")
 	}
@@ -1189,6 +1211,9 @@ func (p *Parser) skipWhitespaceAndComments() {
 			continue
 		}
 		if c == '#' {
+			if p.strict {
+				p.checkCommentLineTab()
+			}
 			// Skip comment to end of line
 			for p.pos < p.length && p.data[p.pos] != '\n' && p.data[p.pos] != '\r' {
 				p.advance()
@@ -1196,6 +1221,27 @@ func (p *Parser) skipWhitespaceAndComments() {
 			continue
 		}
 		break
+	}
+}
+
+// checkCommentLineTab records an error if the comment at p.pos is on a line of
+// its own and that line is indented with a tab.
+func (p *Parser) checkCommentLineTab() {
+	if p.strictErr != nil {
+		return
+	}
+	hasTab := false
+	for i := p.lineStartOf(p.pos); i < p.pos; i++ {
+		switch p.data[i] {
+		case '\t':
+			hasTab = true
+		case ' ':
+		default:
+			return // the comment follows content: not indentation
+		}
+	}
+	if hasTab {
+		p.strictErr = fmt.Errorf("tab character used for indentation at line %d (YAML requires spaces)", p.line)
 	}
 }
 
@@ -1216,15 +1262,35 @@ func (p *Parser) skipToNextLine() {
 	}
 }
 
+// lineStartOf returns the offset of the first byte of the line containing pos.
+// The last answer is cached, so repeated calls along one long line (for
+// example "- - - x") do not rescan it from the start each time.
+func (p *Parser) lineStartOf(pos int) int {
+	if pos >= p.lsStart && pos <= p.lsPos {
+		return p.lsStart
+	}
+	start := pos
+	for start > 0 && start > p.lsPos && p.data[start-1] != '\n' && p.data[start-1] != '\r' {
+		start--
+	}
+	if start == p.lsPos && pos > p.lsPos && p.lsPos >= p.lsStart {
+		// Reached the cached position without a line break in between.
+		start = p.lsStart
+	} else {
+		for start > 0 && p.data[start-1] != '\n' && p.data[start-1] != '\r' {
+			start--
+		}
+	}
+	p.lsStart, p.lsPos = start, pos
+	return start
+}
+
 // currentIndent returns the indentation of the current line.
 // It looks back from the current position to find the start of the line,
 // then counts whitespace from there.
 func (p *Parser) currentIndent() int {
 	// Find the start of the current line
-	lineStart := p.pos
-	for lineStart > 0 && p.data[lineStart-1] != '\n' && p.data[lineStart-1] != '\r' {
-		lineStart--
-	}
+	lineStart := p.lineStartOf(p.pos)
 
 	// Count whitespace from line start
 	indent := 0
@@ -1252,10 +1318,7 @@ func (p *Parser) currentIndent() int {
 // contentColumn() returns the actual column position of the current byte.
 // For example, for "  - url:" with p.pos at 'u', this returns 4.
 func (p *Parser) contentColumn() int {
-	lineStart := p.pos
-	for lineStart > 0 && p.data[lineStart-1] != '\n' && p.data[lineStart-1] != '\r' {
-		lineStart--
-	}
+	lineStart := p.lineStartOf(p.pos)
 	return p.pos - lineStart
 }
 

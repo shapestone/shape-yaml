@@ -3,6 +3,7 @@ package yaml
 import (
 	"strings"
 	"testing"
+	"time"
 
 	yamlv3 "gopkg.in/yaml.v3"
 )
@@ -44,6 +45,10 @@ var validateCases = []struct {
 	// What v0.4.0 rejected and must still be rejected.
 	{"tab indentation", "a:\n\tb: 1", false, false, ""},
 	{"tab indentation top", "\ta: 1", false, false, ""},
+	{"tab-indented comment line", "a: 1\n\t# c\nb: 2", false, false, ""},
+	{"tab-indented comment between entries", "a:\n  b: 1\n\t# c\n  d: 2", false, false, ""},
+	{"tab after content before comment", "a: 1\t# c", true, true, ""},
+	{"tab-only blank line", "a: 1\n\t\nb: 2", true, true, "yaml.v3 rejects; v0.4.0 skipped blank lines"},
 	{"unterminated single quote", "a: 'abc", false, false, ""},
 	{"unterminated double quote", `a: "abc`, false, false, ""},
 	{"unterminated flow sequence", "a: [1, 2", false, false, "v0.4.0 only checked quotes"},
@@ -130,5 +135,34 @@ func TestValidate_ErrorsMentionLine(t *testing.T) {
 	err := Validate("a: 1\nb: 2\na: 3")
 	if err == nil || !strings.Contains(err.Error(), "line 3") {
 		t.Errorf("want duplicate-key error on line 3, got %v", err)
+	}
+}
+
+func TestValidate_DeepNestingFailsFast(t *testing.T) {
+	const n = 200000
+	cases := map[string]string{
+		"unterminated flow sequence": strings.Repeat("[", n),
+		"closed flow sequence":       strings.Repeat("[", n) + strings.Repeat("]", n),
+		"flow mapping":               strings.Repeat("{a:", n),
+		"nested block sequence":      strings.Repeat("- ", n) + "x",
+	}
+	for name, in := range cases {
+		t.Run(name, func(t *testing.T) {
+			start := time.Now()
+			err := Validate(in)
+			if err == nil {
+				t.Fatal("want an error for 200k-deep input")
+			}
+			if d := time.Since(start); d > 5*time.Second {
+				t.Errorf("took %v, want well under 5s", d)
+			}
+		})
+	}
+	// Moderate nesting stays valid.
+	if err := Validate(strings.Repeat("- ", 1000) + "x"); err != nil {
+		t.Errorf("1000-deep sequence rejected: %v", err)
+	}
+	if err := Validate(strings.Repeat("[", 1000) + strings.Repeat("]", 1000)); err != nil {
+		t.Errorf("1000-deep flow sequence rejected: %v", err)
 	}
 }

@@ -10,11 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - `yaml.Validate` now accepts plain multi-word scalars and the other valid inputs the AST-based validator rejected: `name: John Smith`, `- hello world`, `1: a`, `yes: 1`, `a: 2001-01-01`, `a: 010`, a bare scalar document, and multi-document streams (`a: 1\n---\nb: 2`). It now runs on the same fast parser as `Unmarshal`, so the two agree.
 - `yaml.Validate` rejects tab indentation and unterminated quoted strings again (as shape v0.4.0 did); the AST-based validator accepted both.
+- A long single line of nested block sequences (`- - - x`, 200k deep) took about 49 s because each level rescanned the line to find its start; the line start is now cached and the same input is rejected (depth limit) in well under a second.
 
 ### Changed
 - `yaml.Validate` rejects duplicate mapping keys (`a: 1\na: 2`), block and flow, per YAML 1.2 §3.2.1.1. shape v0.4.0 accepted them.
 - `yaml.Validate` rejects `a: b: c` (a block mapping on the same line as its parent key) and content left after a top-level block or flow collection (`- a\nb: c`).
 - `yaml.Validate` accepts a leading UTF-8 BOM.
+- `yaml.Validate` rejects a tab in the indentation of a comment-only line (`a: 1\n\t# c`), as shape v0.4.0 did. A line holding only whitespace is still accepted.
+- Nesting deeper than 10,000 levels (block or flow) is now an error in the fast parser, so `Validate` and `Unmarshal` fail with a message instead of relying on the Go stack limit.
 
 ### Added
 - `yaml.ValidateReader(io.Reader)`, the reader variant of `Validate` (reads the input into memory; wrap in `io.LimitReader` to cap size).

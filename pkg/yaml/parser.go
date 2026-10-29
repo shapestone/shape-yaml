@@ -207,13 +207,16 @@ func ParseMultiDocReader(reader io.Reader) ([]ast.SchemaNode, error) {
 //
 // Validate accepts the same plain scalars as Unmarshal (for example
 // "name: John Smith"), single documents and multi-document streams
-// ("a: 1\n---\nb: 2"). It is stricter than Unmarshal in three ways:
+// ("a: 1\n---\nb: 2"). It is stricter than Unmarshal:
 //
-//   - tab characters used for indentation are rejected;
+//   - tab characters used for indentation are rejected, including on
+//     comment lines (a line holding only whitespace, tabs included, is
+//     accepted, as in shape v0.4.0);
 //   - duplicate mapping keys are rejected, as YAML 1.2 requires keys to be
 //     unique ("a: 1\na: 2" is an error);
 //   - content left over after a top-level block or flow collection is
-//     rejected.
+//     rejected;
+//   - nesting deeper than 10,000 levels is an error.
 //
 // An unterminated quoted string is an error. The parsed values are discarded.
 //
