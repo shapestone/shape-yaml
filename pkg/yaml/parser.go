@@ -205,9 +205,12 @@ func ParseMultiDocReader(reader io.Reader) ([]ast.SchemaNode, error) {
 
 // Validate checks if a YAML string is syntactically valid.
 //
-// Validate accepts the same plain scalars as Unmarshal (for example
-// "name: John Smith"), single documents and multi-document streams
-// ("a: 1\n---\nb: 2"). It is stricter than Unmarshal:
+// Validate runs the fast parser that Unmarshal uses, so it accepts the same
+// plain scalars (for example "name: John Smith"), single documents and
+// multi-document streams ("a: 1\n---\nb: 2"). It is not a complete YAML 1.2
+// validator: some malformed input (a stray '}', "[1,,2]") is still accepted,
+// and Validate and Unmarshal can disagree on malformed input. Validate is
+// stricter than Unmarshal:
 //
 //   - tab characters used for indentation are rejected, including on
 //     comment lines (a line holding only whitespace, tabs included, is

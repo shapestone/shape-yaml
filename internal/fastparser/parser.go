@@ -35,12 +35,19 @@ type Parser struct {
 	strictErr error
 
 	lsStart, lsPos int // lineStartOf cache
+	owner          int // indent of the key or dash that owns the scalar about to be parsed
 	depth          int // current nesting depth
 }
 
 // maxDepth bounds nesting so hostile input fails with an error instead of
 // exhausting the stack.
 const maxDepth = 10000
+
+// maxKeyLen is the longest implicit mapping key, in bytes.
+const maxKeyLen = 1024
+
+// noOwner means a plain scalar cannot continue onto further lines.
+const noOwner = int(^uint(0) >> 1)
 
 // NewParser creates a new fast parser for the given data.
 func NewParser(data []byte) *Parser {
@@ -50,6 +57,7 @@ func NewParser(data []byte) *Parser {
 		length:  len(data),
 		line:    1,
 		column:  1,
+		owner:   noOwner,
 		anchors: make(map[string]interface{}),
 	}
 }
@@ -65,6 +73,7 @@ func (p *Parser) Parse() (interface{}, error) {
 		return nil, nil // Empty document
 	}
 
+	p.owner = -1 // a root scalar may continue at any indent
 	value, err := p.parseValue(0)
 	if err != nil {
 		return nil, err
@@ -113,6 +122,7 @@ func (p *Parser) ParseMultiDoc() ([]interface{}, error) {
 			break
 		}
 
+		p.owner = -1 // a root scalar may continue at any indent
 		value, err := p.parseValue(0)
 		if err != nil {
 			return nil, err
@@ -161,7 +171,7 @@ func (p *Parser) parseValue(indent int) (interface{}, error) {
 	p.depth++
 	defer func() { p.depth-- }()
 	if p.depth > maxDepth {
-		return nil, fmt.Errorf("nesting deeper than %d levels at line %d", maxDepth, p.line)
+		return nil, &depthError{line: p.line}
 	}
 	p.skipWhitespaceAndComments()
 	if p.pos >= p.length {
@@ -225,13 +235,24 @@ func (p *Parser) looksLikeMapping() bool {
 	savedPos := p.pos
 	defer func() { p.pos = savedPos }()
 
-	for p.pos < p.length {
+	// An implicit key lives on one line and is at most maxKeyLen bytes long
+	// (YAML 1.2, 7.4.2). Bounding the scan keeps long lines of hostile input
+	// from being rescanned at every nesting level.
+	limit := savedPos + maxKeyLen
+	if limit > p.length {
+		limit = p.length
+	}
+
+	for p.pos < limit {
 		c := p.data[p.pos]
 
 		// Skip over quoted strings — colons inside quotes are not mapping indicators
 		if c == '"' {
 			p.pos++
-			for p.pos < p.length {
+			for p.pos < limit {
+				if p.data[p.pos] == '\n' || p.data[p.pos] == '\r' {
+					return false // a quoted key cannot span lines
+				}
 				if p.data[p.pos] == '\\' {
 					p.pos += 2
 					continue
@@ -246,7 +267,10 @@ func (p *Parser) looksLikeMapping() bool {
 		}
 		if c == '\'' {
 			p.pos++
-			for p.pos < p.length {
+			for p.pos < limit {
+				if p.data[p.pos] == '\n' || p.data[p.pos] == '\r' {
+					return false
+				}
 				if p.data[p.pos] == '\'' && p.pos+1 < p.length && p.data[p.pos+1] == '\'' {
 					p.pos += 2
 					continue
@@ -340,6 +364,7 @@ func (p *Parser) parseBlockMapping(baseIndent int) (map[string]interface{}, erro
 
 		// Parse value
 		p.skipSpaces()
+		p.owner = baseIndent
 
 		var value interface{}
 		if p.pos < p.length && p.data[p.pos] != '\n' && p.data[p.pos] != '\r' && p.data[p.pos] != '#' {
@@ -353,7 +378,7 @@ func (p *Parser) parseBlockMapping(baseIndent int) (map[string]interface{}, erro
 				}
 			}
 			if err != nil {
-				return nil, fmt.Errorf("in value for key %q: %w", key, err)
+				return nil, wrapf(err, "in value for key %q", key)
 			}
 		} else {
 			// Value on next line (or empty)
@@ -365,13 +390,13 @@ func (p *Parser) parseBlockMapping(baseIndent int) (map[string]interface{}, erro
 				if nextIndent > baseIndent {
 					value, err = p.parseValue(nextIndent)
 					if err != nil {
-						return nil, fmt.Errorf("in value for key %q: %w", key, err)
+						return nil, wrapf(err, "in value for key %q", key)
 					}
 				} else if nextIndent == baseIndent && p.data[p.pos] == '-' && p.isSequenceIndicator() && !p.isDocumentMarker() {
 					// Indentless sequence: "a:\n- b\n- c" (sequence at the key's indent).
 					value, err = p.parseBlockSequence(baseIndent)
 					if err != nil {
-						return nil, fmt.Errorf("in value for key %q: %w", key, err)
+						return nil, wrapf(err, "in value for key %q", key)
 					}
 				}
 			}
@@ -462,6 +487,7 @@ func (p *Parser) parseBlockSequence(baseIndent int) ([]interface{}, error) {
 
 		p.advance() // skip '-'
 		p.skipSpaces()
+		p.owner = baseIndent
 
 		// Parse element value
 		var value interface{}
@@ -471,7 +497,7 @@ func (p *Parser) parseBlockSequence(baseIndent int) ([]interface{}, error) {
 			// Inline value after dash
 			value, err = p.parseValue(p.contentColumn())
 			if err != nil {
-				return nil, fmt.Errorf("in sequence item %d: %w", len(result), err)
+				return nil, wrapf(err, "in sequence item %d", len(result))
 			}
 		} else {
 			// Value on next line
@@ -483,7 +509,7 @@ func (p *Parser) parseBlockSequence(baseIndent int) ([]interface{}, error) {
 				if nextIndent > baseIndent {
 					value, err = p.parseValue(nextIndent)
 					if err != nil {
-						return nil, fmt.Errorf("in sequence item %d: %w", len(result), err)
+						return nil, wrapf(err, "in sequence item %d", len(result))
 					}
 				}
 			}
@@ -500,7 +526,7 @@ func (p *Parser) parseFlowMapping() (map[string]interface{}, error) {
 	p.depth++
 	defer func() { p.depth-- }()
 	if p.depth > maxDepth {
-		return nil, fmt.Errorf("nesting deeper than %d levels at line %d", maxDepth, p.line)
+		return nil, &depthError{line: p.line}
 	}
 	if p.pos >= p.length || p.data[p.pos] != '{' {
 		return nil, errors.New("expected '{'")
@@ -570,7 +596,7 @@ func (p *Parser) parseFlowSequence() ([]interface{}, error) {
 	p.depth++
 	defer func() { p.depth-- }()
 	if p.depth > maxDepth {
-		return nil, fmt.Errorf("nesting deeper than %d levels at line %d", maxDepth, p.line)
+		return nil, &depthError{line: p.line}
 	}
 	if p.pos >= p.length || p.data[p.pos] != '[' {
 		return nil, errors.New("expected '['")
@@ -771,7 +797,127 @@ func (p *Parser) parseScalar() (interface{}, error) {
 	}
 
 	value := trimBytes(p.data[start:p.pos])
+	if owner := p.takeOwner(); p.pos < p.length && p.data[p.pos] != '#' && (p.data[p.pos] == '\n' || p.data[p.pos] == '\r') {
+		more, err := p.continuePlainScalar(owner)
+		if err != nil {
+			return nil, err
+		}
+		if more != "" {
+			return p.interpretScalar(append(append([]byte{}, value...), more...)), nil
+		}
+	}
 	return p.interpretScalar(value), nil
+}
+
+// takeOwner returns the indent that a continuation line must exceed and resets
+// it, so a scalar parsed without an owning key or dash never continues.
+func (p *Parser) takeOwner() int {
+	o := p.owner
+	p.owner = noOwner
+	return o
+}
+
+// continuePlainScalar folds the continuation lines of a plain scalar whose
+// first line has just been read (p.pos is at its line break). A continuation
+// line is more indented than owner, is not a comment or document marker, and
+// is joined to the text before it by a single space; each blank line in
+// between becomes a newline instead. It returns the text to append (with its
+// leading space or newlines), or "" if the scalar does not continue, and leaves
+// p.pos at the end of the last line consumed. A continuation line that looks
+// like "key: value" is an error, as in YAML 1.2 (mapping values are not
+// allowed there).
+func (p *Parser) continuePlainScalar(owner int) (string, error) {
+	var out []byte
+	for {
+		// Look ahead over the line break and blank lines.
+		pos := p.pos
+		blank := 0
+		for {
+			pos = skipLineBreak(p.data, pos)
+			ls := pos
+			for pos < p.length && (p.data[pos] == ' ' || p.data[pos] == '\t') {
+				pos++
+			}
+			if pos < p.length && (p.data[pos] == '\n' || p.data[pos] == '\r') {
+				blank++
+				continue
+			}
+			pos = ls
+			break
+		}
+		// pos is the start of the next non-blank line (or end of input).
+		if pos >= p.length {
+			return string(out), nil
+		}
+		indent := 0
+		c := pos
+		for c < p.length && (p.data[c] == ' ' || p.data[c] == '\t') {
+			if p.data[c] == ' ' {
+				indent++
+			}
+			c++
+		}
+		if c >= p.length || indent <= owner || p.data[c] == '#' || (indent == 0 && p.documentMarkerAt(c)) {
+			return string(out), nil
+		}
+		// Find the end of this line's text: a comment ends the scalar after it.
+		end := c
+		commented := false
+		for end < p.length && p.data[end] != '\n' && p.data[end] != '\r' {
+			if p.data[end] == '#' && (p.data[end-1] == ' ' || p.data[end-1] == '\t') {
+				commented = true
+				break
+			}
+			if p.data[end] == ':' && (end+1 >= p.length || p.data[end+1] == ' ' || p.data[end+1] == '\t' || p.data[end+1] == '\n' || p.data[end+1] == '\r') {
+				return "", fmt.Errorf("mapping values are not allowed in this context at line %d", p.line+1+blank)
+			}
+			end++
+		}
+		text := trimBytes(p.data[c:end])
+		if len(text) == 0 {
+			return string(out), nil
+		}
+		if blank > 0 {
+			out = append(out, bytes.Repeat([]byte{'\n'}, blank)...)
+		} else {
+			out = append(out, ' ')
+		}
+		out = append(out, text...)
+		// Consume through the text we used (keeping line/column bookkeeping).
+		for p.pos < end {
+			p.advance()
+		}
+		if commented {
+			return string(out), nil
+		}
+	}
+}
+
+// skipLineBreak returns the offset after the line break at pos ("\n", "\r\n" or "\r").
+func skipLineBreak(data []byte, pos int) int {
+	if pos < len(data) && data[pos] == '\r' {
+		pos++
+		if pos < len(data) && data[pos] == '\n' {
+			pos++
+		}
+		return pos
+	}
+	if pos < len(data) && data[pos] == '\n' {
+		pos++
+	}
+	return pos
+}
+
+// documentMarkerAt reports whether a "---" or "..." document marker starts at pos.
+func (p *Parser) documentMarkerAt(pos int) bool {
+	if pos+3 > p.length {
+		return false
+	}
+	m := p.data[pos : pos+3]
+	if string(m) != "---" && string(m) != "..." {
+		return false
+	}
+	return pos+3 == p.length || p.data[pos+3] == ' ' || p.data[pos+3] == '\t' || p.data[pos+3] == '\n' || p.data[pos+3] == '\r'
 }
 
 // isBlockScalarIndicator checks if current position is a block scalar indicator
@@ -945,10 +1091,7 @@ func (p *Parser) parseBlockScalar(folded bool) (interface{}, error) {
 	case "strip":
 		// No trailing newline
 	case "keep":
-		content += "\n"
-		for i := 0; i < trailingNewlines; i++ {
-			content += "\n"
-		}
+		content += "\n" + strings.Repeat("\n", trailingNewlines)
 	default: // clip
 		content += "\n"
 	}
@@ -956,38 +1099,13 @@ func (p *Parser) parseBlockScalar(folded bool) (interface{}, error) {
 	return content, nil
 }
 
-func joinLines(lines []string) string {
-	if len(lines) == 0 {
-		return ""
-	}
-	result := lines[0]
-	for _, line := range lines[1:] {
-		result += "\n" + line
-	}
-	return result
-}
+// The join helpers use strings.Join: repeated string concatenation is
+// quadratic on block scalars with many lines.
+func joinLines(lines []string) string { return strings.Join(lines, "\n") }
 
-func joinWords(words []string) string {
-	if len(words) == 0 {
-		return ""
-	}
-	result := words[0]
-	for _, w := range words[1:] {
-		result += " " + w
-	}
-	return result
-}
+func joinWords(words []string) string { return strings.Join(words, " ") }
 
-func joinParts(parts []string) string {
-	if len(parts) == 0 {
-		return ""
-	}
-	result := parts[0]
-	for _, part := range parts[1:] {
-		result += "\n" + part
-	}
-	return result
-}
+func joinParts(parts []string) string { return strings.Join(parts, "\n") }
 
 // parseDoubleQuotedString parses a double-quoted string.
 func (p *Parser) parseDoubleQuotedString() (string, error) {
@@ -1401,7 +1519,7 @@ func (p *Parser) parseAnchoredValue(indent int) (interface{}, error) {
 	// Parse the value
 	value, err := p.parseValue(indent)
 	if err != nil {
-		return nil, fmt.Errorf("in anchored value &%s: %w", anchorName, err)
+		return nil, wrapf(err, "in anchored value &%s", anchorName)
 	}
 
 	p.anchors[anchorName] = value
@@ -1452,7 +1570,7 @@ func (p *Parser) parseTaggedValue(indent int) (interface{}, error) {
 	// Parse the value after the tag
 	value, err := p.parseValue(indent)
 	if err != nil {
-		return nil, fmt.Errorf("in tagged value %s: %w", tag, err)
+		return nil, wrapf(err, "in tagged value %s", tag)
 	}
 
 	return p.applyTag(tag, value), nil
@@ -1622,7 +1740,7 @@ func (p *Parser) parseComplexMapping(baseIndent int) (map[string]interface{}, er
 		// Parse key value
 		keyVal, err := p.parseValue(baseIndent + 1)
 		if err != nil {
-			return nil, fmt.Errorf("in complex key: %w", err)
+			return nil, wrapf(err, "in complex key")
 		}
 
 		key := stringifyValue(keyVal)
@@ -1636,13 +1754,14 @@ func (p *Parser) parseComplexMapping(baseIndent int) (map[string]interface{}, er
 		}
 		p.advance() // skip ':'
 		p.skipSpaces()
+		p.owner = baseIndent
 
 		// Parse value
 		var value interface{}
 		if p.pos < p.length && p.data[p.pos] != '\n' && p.data[p.pos] != '\r' && p.data[p.pos] != '#' {
 			value, err = p.parseValue(lineIndent)
 			if err != nil {
-				return nil, fmt.Errorf("in value for complex key: %w", err)
+				return nil, wrapf(err, "in value for complex key")
 			}
 		} else {
 			p.skipToNextLine()
@@ -1652,7 +1771,7 @@ func (p *Parser) parseComplexMapping(baseIndent int) (map[string]interface{}, er
 				if nextIndent > baseIndent {
 					value, err = p.parseValue(nextIndent)
 					if err != nil {
-						return nil, fmt.Errorf("in value for complex key: %w", err)
+						return nil, wrapf(err, "in value for complex key")
 					}
 				}
 			}
@@ -1713,3 +1832,20 @@ var (
 	negInf = math.Inf(-1)
 	nan    = math.NaN()
 )
+
+// depthError reports input nested deeper than maxDepth. wrapf does not add
+// context to it, so the message stays short instead of growing at every level
+// the error unwinds through (which would make failing cost quadratic).
+type depthError struct{ line int }
+
+func (e *depthError) Error() string {
+	return fmt.Sprintf("nesting deeper than %d levels at line %d", maxDepth, e.line)
+}
+
+// wrapf adds context to err, except for a depthError, which is returned as is.
+func wrapf(err error, format string, args ...interface{}) error {
+	if _, ok := err.(*depthError); ok {
+		return err
+	}
+	return fmt.Errorf(format+": %w", append(args, err)...)
+}
