@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `yaml.Validate` rejects tab indentation and unterminated quoted strings again (as shape v0.4.0 did); the AST-based validator accepted both.
 - A long single line of nested block sequences (`- - - x`, 200k deep) took about 49 s because each level rescanned the line to find its start; the line start is now cached and the same input is rejected (depth limit) in well under a second.
 
+- Keys containing a colon that is not followed by white space are valid again: `http://x.com: 1`, `12:30: lunch`, `a:b: c`. The fast parser ended a plain key at any `:`, so the new `a: b: c` check rejected them; a colon now separates key and value only when followed by a space, tab or line end. This also fixes such keys in `Unmarshal`.
+- Indentless block sequences (`a:\n- b\n- c`, the usual Kubernetes and CI layout) are accepted by `Validate` and `Unmarshal` (maps, structs and `interface{}`).
+
 ### Changed
 - `yaml.Validate` rejects duplicate mapping keys (`a: 1\na: 2`), block and flow, per YAML 1.2 §3.2.1.1. shape v0.4.0 accepted them.
 - `yaml.Validate` rejects `a: b: c` (a block mapping on the same line as its parent key) and content left after a top-level block or flow collection (`- a\nb: c`).

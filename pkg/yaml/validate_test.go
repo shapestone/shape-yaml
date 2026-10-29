@@ -42,6 +42,24 @@ var validateCases = []struct {
 	{"tab after colon", "a:\t1", true, false, "tab as separation space is valid YAML; v0.4.0 rejected every tab"},
 	{"quoted with escapes", `a: "he said \"hi\""` + "\nb: 'it''s'", true, true, ""},
 
+	// Keys with a colon that is not followed by white space.
+	{"url key", "http://x.com: 1", true, true, ""},
+	{"time key", "12:30: lunch", true, true, ""},
+	{"colon inside key", "a:b: c", true, true, ""},
+	{"colon then letters", "a:bx: 1", true, true, ""},
+	{"colon in nested key", "t:\n  10:30: standup\n  http://y.org: 2", true, true, ""},
+	{"colon in value", "a: http://x.com:8080/p", true, true, ""},
+	{"key ending in colon at EOF", "a:", true, true, ""},
+
+	// Indentless block sequences.
+	{"indentless sequence", "a:\n- b\n- c\n", true, true, ""},
+	{"indentless then key", "a:\n- b\nc: d", true, true, ""},
+	{"indentless nested", "x:\n  a:\n  - b\n  - c\n  d: 1", true, true, ""},
+	{"indentless maps", "a:\n- k: 1\n  j: 2\n- k: 3", true, true, ""},
+	{"indentless before doc end", "a:\n- b\n---\nc: 1", true, true, ""},
+	{"indentless, sequence of sequences", "a:\n- - 1\n  - 2\n- - 3", true, true, ""},
+	{"indentless then duplicate key", "a:\n- b\na: 1", false, true, ""},
+
 	// What v0.4.0 rejected and must still be rejected.
 	{"tab indentation", "a:\n\tb: 1", false, false, ""},
 	{"tab indentation top", "\ta: 1", false, false, ""},
@@ -164,5 +182,42 @@ func TestValidate_DeepNestingFailsFast(t *testing.T) {
 	}
 	if err := Validate(strings.Repeat("[", 1000) + strings.Repeat("]", 1000)); err != nil {
 		t.Errorf("1000-deep flow sequence rejected: %v", err)
+	}
+}
+
+func TestUnmarshal_ColonKeysAndIndentlessSequences(t *testing.T) {
+	var v map[string]interface{}
+	if err := Unmarshal([]byte("http://x.com: 1\n12:30: lunch\na:b: c"), &v); err != nil {
+		t.Fatal(err)
+	}
+	if v["http://x.com"] != int64(1) && v["http://x.com"] != 1 || v["12:30"] != "lunch" || v["a:b"] != "c" {
+		t.Errorf("colon keys parsed as %#v", v)
+	}
+
+	var w map[string]interface{}
+	if err := Unmarshal([]byte("a:\n- b\n- c\nd: e\nf:\n- k: 1\n  j: 2\n- k: 3\n"), &w); err != nil {
+		t.Fatal(err)
+	}
+	a, _ := w["a"].([]interface{})
+	f, _ := w["f"].([]interface{})
+	if len(a) != 2 || a[0] != "b" || a[1] != "c" || w["d"] != "e" || len(f) != 2 {
+		t.Errorf("indentless sequences parsed as %#v", w)
+	}
+	if m, _ := f[0].(map[string]interface{}); m["k"] != int64(1) && m["k"] != 1 || m["j"] == nil {
+		t.Errorf("indentless sequence of maps: %#v", f)
+	}
+}
+
+func TestUnmarshal_IndentlessSequenceIntoStruct(t *testing.T) {
+	var cfg struct {
+		Items []string `yaml:"items"`
+		Name  string   `yaml:"name"`
+		Ports []int    `yaml:"ports"`
+	}
+	if err := Unmarshal([]byte("items:\n- a\n- b\nname: x\nports:\n- 80\n- 443\n"), &cfg); err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Items) != 2 || cfg.Items[1] != "b" || cfg.Name != "x" || len(cfg.Ports) != 2 || cfg.Ports[1] != 443 {
+		t.Errorf("got %+v", cfg)
 	}
 }

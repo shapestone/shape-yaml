@@ -304,7 +304,7 @@ func (p *Parser) unmarshalStruct(rv reflect.Value, baseIndent int) error {
 
 			if p.pos < p.length {
 				nextIndent := p.currentIndent()
-				if nextIndent > baseIndent {
+				if nextIndent > baseIndent || p.indentlessSequenceAt(nextIndent, baseIndent) {
 					if ok {
 						fieldVal := rv.Field(fieldInfo.index)
 						if err := p.unmarshalValueAtIndent(fieldVal, nextIndent); err != nil {
@@ -439,7 +439,7 @@ func (p *Parser) unmarshalMap(rv reflect.Value, baseIndent int) error {
 
 			if p.pos < p.length {
 				nextIndent := p.currentIndent()
-				if nextIndent > baseIndent {
+				if nextIndent > baseIndent || p.indentlessSequenceAt(nextIndent, baseIndent) {
 					if err := p.unmarshalValueAtIndent(elemVal, nextIndent); err != nil {
 						return err
 					}
@@ -1262,4 +1262,11 @@ func buildFieldCache(t reflect.Type) *fieldCache {
 	}
 
 	return fc
+}
+
+// indentlessSequenceAt reports whether p.pos starts a block sequence entry at the
+// same indent as the mapping key that owns it ("a:\n- b"), which YAML allows as
+// the value of a mapping key.
+func (p *Parser) indentlessSequenceAt(indent, baseIndent int) bool {
+	return indent == baseIndent && p.isSequenceIndicator() && !p.isDocumentMarker()
 }

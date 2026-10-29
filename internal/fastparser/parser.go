@@ -367,6 +367,12 @@ func (p *Parser) parseBlockMapping(baseIndent int) (map[string]interface{}, erro
 					if err != nil {
 						return nil, fmt.Errorf("in value for key %q: %w", key, err)
 					}
+				} else if nextIndent == baseIndent && p.data[p.pos] == '-' && p.isSequenceIndicator() && !p.isDocumentMarker() {
+					// Indentless sequence: "a:\n- b\n- c" (sequence at the key's indent).
+					value, err = p.parseBlockSequence(baseIndent)
+					if err != nil {
+						return nil, fmt.Errorf("in value for key %q: %w", key, err)
+					}
 				}
 			}
 		}
@@ -704,7 +710,9 @@ func (p *Parser) parseKey() (string, error) {
 	start := p.pos
 	for p.pos < p.length {
 		c := p.data[p.pos]
-		if c == ':' {
+		// A colon only separates key from value when followed by white space
+		// or the end of the line: "http://x.com: 1" and "12:30: lunch" are keys.
+		if c == ':' && p.colonEndsKey() {
 			break
 		}
 		if c == '\n' || c == '\r' {
@@ -715,6 +723,19 @@ func (p *Parser) parseKey() (string, error) {
 
 	key := trimBytes(p.data[start:p.pos])
 	return string(key), nil
+}
+
+// colonEndsKey reports whether the ':' at p.pos is followed by a space, tab,
+// line break or the end of input, which makes it a mapping value indicator.
+func (p *Parser) colonEndsKey() bool {
+	if p.pos+1 >= p.length {
+		return true
+	}
+	switch p.data[p.pos+1] {
+	case ' ', '\t', '\n', '\r':
+		return true
+	}
+	return false
 }
 
 // parseScalar parses a scalar value.
