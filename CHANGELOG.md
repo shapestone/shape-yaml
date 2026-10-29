@@ -15,15 +15,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Keys containing a colon that is not followed by white space are valid again: `http://x.com: 1`, `12:30: lunch`, `a:b: c`. The fast parser ended a plain key at any `:`, so the new `a: b: c` check rejected them; a colon now separates key and value only when followed by a space, tab or line end. This also fixes such keys in `Unmarshal`.
 - Indentless block sequences (`a:\n- b\n- c`, the usual Kubernetes and CI layout) are accepted by `Validate` and `Unmarshal` (maps, structs and `interface{}`).
 
+- Explicit mapping keys (`? a\n: b`) work in `Validate` and `Unmarshal` also when mixed with ordinary keys (`? a\n: b\nc: d`), nested under a key, and inside sequences (`- ? a\n  : b`). Before, the `: b` line was not treated specially, and a mapping with both kinds of key lost the ordinary entries. A stream with an empty document (`a: 1\n---\n---\nb: 2`) is valid.
+
 ### Changed
 - `yaml.Validate` rejects duplicate mapping keys (`a: 1\na: 2`), block and flow, per YAML 1.2 §3.2.1.1. shape v0.4.0 accepted them.
 - `yaml.Validate` rejects `a: b: c` (a block mapping on the same line as its parent key) and content left after a top-level block or flow collection (`- a\nb: c`).
 - `yaml.Validate` accepts a leading UTF-8 BOM.
 - `yaml.Validate` rejects a tab in the indentation of a comment-only line (`a: 1\n\t# c`), as shape v0.4.0 did. A line holding only whitespace is still accepted.
+- `Unmarshal` now returns an error for `a: x\n  y: z` (a more-indented line of the form `key: value` after a plain scalar), which is invalid YAML. It used to return `{"a":"x"}` and silently drop the rest.
+- Implicit mapping keys (a key written without `?`) must fit on one line and be at most 1,024 bytes, as YAML 1.2 requires. This also bounds how far the parser looks ahead for a `:`. A longer "key" is treated as a plain scalar, so for such input `Validate` and `Unmarshal` can differ from `yaml.v3`, which reports an error.
 - Nesting deeper than 10,000 levels (block or flow) is now an error in the fast parser, so `Validate` and `Unmarshal` fail with a message instead of relying on the Go stack limit.
 
 ### Added
 - `yaml.ValidateReader(io.Reader)`, the reader variant of `Validate` (reads the input into memory; wrap in `io.LimitReader` to cap size).
+
+### Known issues
+- A `#` that is not preceded by white space is part of a plain scalar in YAML, but the fast parser ends the scalar there: `Unmarshal` of `k: a#b` returns `a`, and `url: http://x.com/p#frag` loses `#frag`. This predates this release (it is the same in v0.10.1). `Validate`'s verdict is not affected.
 
 ### Notes
 - `yaml.Parse` and `yaml.ParseMultiDoc` still use the tokenizer/AST parser and still reject plain multi-word scalars. Fixing them means unifying the parsers, planned for v0.11.0.

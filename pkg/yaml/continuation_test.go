@@ -2,7 +2,9 @@ package yaml
 
 import (
 	"fmt"
+	"io"
 	"reflect"
+	"strings"
 	"testing"
 
 	yamlv3 "gopkg.in/yaml.v3"
@@ -112,5 +114,75 @@ func TestContinuedPlainScalar_Struct(t *testing.T) {
 	}
 	if len(cfg.Items) != 2 || cfg.Items[0] != "x cont" || cfg.Name != "a b c" || cfg.B != 1 {
 		t.Errorf("got %+v", cfg)
+	}
+}
+
+// Explicit keys ("? key" / ": value") must not be mistaken for continuation
+// lines of a plain scalar (regression found in review).
+func TestExplicitKeys(t *testing.T) {
+	for _, in := range []string{
+		"? a\n: b\n",
+		"? a\n: b\nc: d\n",
+		"? a:b\n: c\n",
+		"key:\n  ? a\n  : b\n",
+		"? a\n: b\n? c\n: d\n",
+		"? a\n:\nx: y\n",
+		"- ? a\n  : b\n",
+	} {
+		t.Run(fmt.Sprintf("%q", in), func(t *testing.T) {
+			var want interface{}
+			if err := yamlv3.Unmarshal([]byte(in), &want); err != nil {
+				t.Skipf("yaml.v3 rejects %q: %v", in, err)
+			}
+			if err := Validate(in); err != nil {
+				t.Errorf("Validate: %v", err)
+			}
+			var got interface{}
+			if err := Unmarshal([]byte(in), &got); err != nil {
+				t.Fatalf("Unmarshal: %v", err)
+			}
+			if !reflect.DeepEqual(normalize(got), normalize(want)) {
+				t.Errorf("Unmarshal = %#v\nyaml.v3   = %#v", got, want)
+			}
+		})
+	}
+	// The four inputs from the review must at least parse (not skip) in yaml.v3.
+	for _, in := range []string{"? a\n: b\n", "? a\n: b\nc: d\n", "? a:b\n: c\n", "key:\n  ? a\n  : b\n"} {
+		var v interface{}
+		if err := yamlv3.Unmarshal([]byte(in), &v); err != nil {
+			t.Fatalf("yaml.v3 rejects %q: %v", in, err)
+		}
+	}
+}
+
+// An empty document in a stream must reset the scalar-continuation state
+// (regression found in review).
+func TestMultiDocumentWithEmptyDocument(t *testing.T) {
+	for _, in := range []string{
+		"a: 1\n---\n---\nb: 2\n",
+		"k: v\n---\n---\n- a:\n- b\n",
+		"  a #c\n---\n---\nt: 12:30\n",
+		"---\n---\nt: 1\n",
+		"---\nt: 12:30\n",
+		"a: 1\n---\n---\n---\nb: 2\n",
+		"a\n---\n---\nb: 2\n",
+		"a: 1\n---\n---\n",
+	} {
+		t.Run(fmt.Sprintf("%q", in), func(t *testing.T) {
+			dec := yamlv3.NewDecoder(strings.NewReader(in))
+			for {
+				var v interface{}
+				err := dec.Decode(&v)
+				if err == io.EOF {
+					break
+				}
+				if err != nil {
+					t.Fatalf("yaml.v3 rejects %q: %v", in, err)
+				}
+			}
+			if err := Validate(in); err != nil {
+				t.Errorf("Validate: %v", err)
+			}
+		})
 	}
 }

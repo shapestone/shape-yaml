@@ -122,6 +122,14 @@ func (p *Parser) ParseMultiDoc() ([]interface{}, error) {
 			break
 		}
 
+		// A further "---" right after a document start is an empty document.
+		if p.isDocumentMarker() && p.data[p.pos] == '-' {
+			p.skipLine()
+			p.skipDirectives()
+			docs = append(docs, nil)
+			continue
+		}
+
 		p.owner = -1 // a root scalar may continue at any indent
 		value, err := p.parseValue(0)
 		if err != nil {
@@ -858,6 +866,10 @@ func (p *Parser) continuePlainScalar(owner int) (string, error) {
 			c++
 		}
 		if c >= p.length || indent <= owner || p.data[c] == '#' || (indent == 0 && p.documentMarkerAt(c)) {
+			return string(out), nil
+		}
+		// A line starting with ": " is the value of an explicit key, not text.
+		if p.data[c] == ':' && (c+1 >= p.length || p.data[c+1] == ' ' || p.data[c+1] == '\t' || p.data[c+1] == '\n' || p.data[c+1] == '\r') {
 			return string(out), nil
 		}
 		// Find the end of this line's text: a comment ends the scalar after it.
@@ -1711,6 +1723,7 @@ func (p *Parser) isComplexKeyIndicator() bool {
 // parseComplexMapping parses a mapping with complex keys (? marker).
 func (p *Parser) parseComplexMapping(baseIndent int) (map[string]interface{}, error) {
 	result := make(map[string]interface{})
+	first := true
 
 	for p.pos < p.length {
 		p.skipWhitespaceAndComments()
@@ -1723,21 +1736,36 @@ func (p *Parser) parseComplexMapping(baseIndent int) (map[string]interface{}, er
 		}
 
 		lineIndent := p.currentIndent()
-		if lineIndent < baseIndent {
+		// The first entry may follow "- " on its line, so it can sit to the right
+		// of the line's indent; later entries must not be left of the mapping.
+		if !first && lineIndent < baseIndent {
 			break
+		}
+		if first && lineIndent >= baseIndent {
+			baseIndent = lineIndent
+		}
+		first = false
+
+		if p.pos >= p.length {
+			break
+		}
+		if p.data[p.pos] != '?' || !p.isComplexKeyIndicator() {
+			// An ordinary "key: value" entry may follow explicit ones.
+			if lineIndent != baseIndent || !p.looksLikeMapping() {
+				break
+			}
+			if err := p.parseImplicitEntry(result, baseIndent); err != nil {
+				return nil, err
+			}
+			continue
 		}
 
-		if p.pos >= p.length || p.data[p.pos] != '?' {
-			break
-		}
-		if !p.isComplexKeyIndicator() {
-			break
-		}
-
+		// A key scalar continues only on lines indented more than the '?', so
+		// the ": value" line is never taken as a continuation.
+		p.owner = p.contentColumn()
 		p.advance() // skip '?'
 		p.skipSpaces()
 
-		// Parse key value
 		keyVal, err := p.parseValue(baseIndent + 1)
 		if err != nil {
 			return nil, wrapf(err, "in complex key")
@@ -1752,9 +1780,9 @@ func (p *Parser) parseComplexMapping(baseIndent int) (map[string]interface{}, er
 		if p.pos >= p.length || p.data[p.pos] != ':' {
 			return nil, fmt.Errorf("expected ':' after complex key at line %d", p.line)
 		}
+		p.owner = p.contentColumn()
 		p.advance() // skip ':'
 		p.skipSpaces()
-		p.owner = baseIndent
 
 		// Parse value
 		var value interface{}
@@ -1784,6 +1812,47 @@ func (p *Parser) parseComplexMapping(baseIndent int) (map[string]interface{}, er
 	}
 
 	return result, nil
+}
+
+// parseImplicitEntry parses one "key: value" entry into m, for a mapping that
+// also has explicit ("? key") entries.
+func (p *Parser) parseImplicitEntry(m map[string]interface{}, baseIndent int) error {
+	key, err := p.parseKey()
+	if err != nil {
+		return err
+	}
+	p.skipSpaces()
+	if p.pos >= p.length || p.data[p.pos] != ':' {
+		return fmt.Errorf("expected ':' after key %q at line %d", key, p.line)
+	}
+	p.advance() // skip ':'
+	p.skipSpaces()
+	p.owner = baseIndent
+
+	var value interface{}
+	if p.pos < p.length && p.data[p.pos] != '\n' && p.data[p.pos] != '\r' && p.data[p.pos] != '#' {
+		value, err = p.parseValue(baseIndent)
+		if err != nil {
+			return wrapf(err, "in value for key %q", key)
+		}
+	} else {
+		p.skipToNextLine()
+		p.skipWhitespaceAndComments()
+		if p.pos < p.length {
+			nextIndent := p.currentIndent()
+			if nextIndent > baseIndent || (nextIndent == baseIndent && p.data[p.pos] == '-' && p.isSequenceIndicator() && !p.isDocumentMarker()) {
+				value, err = p.parseValue(nextIndent)
+				if err != nil {
+					return wrapf(err, "in value for key %q", key)
+				}
+			}
+		}
+	}
+	if err := p.checkDuplicateKey(m, key); err != nil {
+		return err
+	}
+	m[key] = value
+	return nil
 }
 
 // stringifyValue converts an interface{} value to a string for use as a map key.
