@@ -215,8 +215,15 @@ func TestValidate(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			// A more-indented line continues a plain scalar (YAML 1.2 7.3.3);
+			// gopkg.in/yaml.v3 and the v0.4.0 validator also accept it.
+			name:    "multi-line plain scalar",
+			input:   "name: Alice\n  continued",
+			wantErr: false,
+		},
+		{
 			name:    "invalid syntax",
-			input:   "name: Alice\n  invalid indentation",
+			input:   "name: Alice\n\tinvalid indentation",
 			wantErr: true,
 		},
 	}

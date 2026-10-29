@@ -10,6 +10,7 @@
 package fastparser
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"math"
@@ -26,6 +27,12 @@ type Parser struct {
 	line    int
 	column  int
 	anchors map[string]interface{}
+
+	// strict enables the extra checks used by Validate: tab indentation,
+	// duplicate mapping keys and content left over after a block collection.
+	// Unmarshal leaves it off and stays lenient.
+	strict    bool
+	strictErr error
 }
 
 // NewParser creates a new fast parser for the given data.
@@ -57,6 +64,32 @@ func (p *Parser) Parse() (interface{}, error) {
 	}
 
 	return value, nil
+}
+
+// Validate reports whether data is a syntactically valid YAML stream (one or
+// more documents). It runs the fast parser in strict mode, which additionally
+// rejects tab indentation, duplicate mapping keys (YAML 1.2 section 3.2.1.1)
+// and content left over after a top-level block or flow collection. The
+// parsed values are discarded.
+func Validate(data []byte) error {
+	data = bytes.TrimPrefix(data, []byte("\xef\xbb\xbf"))
+	p := NewParser(data)
+	p.strict = true
+	if _, err := p.ParseMultiDoc(); err != nil {
+		return err
+	}
+	return p.strictErr
+}
+
+// checkDuplicateKey returns an error in strict mode if key is already in m.
+func (p *Parser) checkDuplicateKey(m map[string]interface{}, key string) error {
+	if !p.strict {
+		return nil
+	}
+	if _, dup := m[key]; dup {
+		return fmt.Errorf("duplicate mapping key %q at line %d", key, p.line)
+	}
+	return nil
 }
 
 // ParseMultiDoc parses a YAML stream containing multiple documents separated by ---.
@@ -94,6 +127,16 @@ func (p *Parser) ParseMultiDoc() ([]interface{}, error) {
 			// --- separates documents, continue
 			p.skipDirectives()
 			continue
+		}
+
+		// Strict mode: a collection at column 0 must be followed by a document
+		// marker or the end of input. (Scalars are exempt: a plain scalar can
+		// continue on the next line.)
+		if p.strict && p.currentIndent() == 0 {
+			switch value.(type) {
+			case map[string]interface{}, []interface{}:
+				return nil, fmt.Errorf("unexpected content after YAML document at line %d", p.line)
+			}
 		}
 
 		break
@@ -289,7 +332,14 @@ func (p *Parser) parseBlockMapping(baseIndent int) (map[string]interface{}, erro
 		var value interface{}
 		if p.pos < p.length && p.data[p.pos] != '\n' && p.data[p.pos] != '\r' && p.data[p.pos] != '#' {
 			// Inline value
+			lead := p.data[p.pos]
 			value, err = p.parseValue(baseIndent)
+			if err == nil && p.strict && strings.IndexByte("{&!*?", lead) < 0 {
+				// "a: b: c": a block mapping cannot start on the same line as its parent key.
+				if _, isMap := value.(map[string]interface{}); isMap {
+					err = fmt.Errorf("mapping values are not allowed in this context at line %d", p.line)
+				}
+			}
 			if err != nil {
 				return nil, fmt.Errorf("in value for key %q: %w", key, err)
 			}
@@ -315,6 +365,9 @@ func (p *Parser) parseBlockMapping(baseIndent int) (map[string]interface{}, erro
 			continue
 		}
 
+		if err := p.checkDuplicateKey(result, key); err != nil {
+			return nil, err
+		}
 		result[key] = value
 	}
 
@@ -465,6 +518,9 @@ func (p *Parser) parseFlowMapping() (map[string]interface{}, error) {
 			return nil, err
 		}
 
+		if err := p.checkDuplicateKey(result, key); err != nil {
+			return nil, err
+		}
 		result[key] = value
 
 		p.skipWhitespaceAndComments()
@@ -1179,6 +1235,9 @@ func (p *Parser) currentIndent() int {
 			indent++
 			pos++
 		} else if c == '\t' {
+			if p.strict && p.strictErr == nil {
+				p.strictErr = fmt.Errorf("tab character used for indentation at line %d (YAML requires spaces)", p.line)
+			}
 			indent += 2 // Treat tab as 2 spaces
 			pos++
 		} else {
@@ -1515,6 +1574,9 @@ func (p *Parser) parseComplexMapping(baseIndent int) (map[string]interface{}, er
 			}
 		}
 
+		if err := p.checkDuplicateKey(result, key); err != nil {
+			return nil, err
+		}
 		result[key] = value
 	}
 

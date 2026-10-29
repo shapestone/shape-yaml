@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- `yaml.Validate` now accepts plain multi-word scalars and the other valid inputs the AST-based validator rejected: `name: John Smith`, `- hello world`, `1: a`, `yes: 1`, `a: 2001-01-01`, `a: 010`, a bare scalar document, and multi-document streams (`a: 1\n---\nb: 2`). It now runs on the same fast parser as `Unmarshal`, so the two agree.
+- `yaml.Validate` rejects tab indentation and unterminated quoted strings again (as shape v0.4.0 did); the AST-based validator accepted both.
+
+### Changed
+- `yaml.Validate` rejects duplicate mapping keys (`a: 1\na: 2`), block and flow, per YAML 1.2 §3.2.1.1. shape v0.4.0 accepted them.
+- `yaml.Validate` rejects `a: b: c` (a block mapping on the same line as its parent key) and content left after a top-level block or flow collection (`- a\nb: c`).
+- `yaml.Validate` accepts a leading UTF-8 BOM.
+
+### Added
+- `yaml.ValidateReader(io.Reader)`, the reader variant of `Validate` (reads the input into memory; wrap in `io.LimitReader` to cap size).
+
+### Notes
+- `yaml.Parse` and `yaml.ParseMultiDoc` still use the tokenizer/AST parser and still reject plain multi-word scalars. Fixing them means unifying the parsers, planned for v0.11.0.
+
 ## [0.10.0] - 2026-06-17
 
 ### Added

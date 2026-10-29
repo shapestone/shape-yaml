@@ -61,6 +61,7 @@ import (
 
 	"github.com/shapestone/shape-core/pkg/ast"
 	"github.com/shapestone/shape-core/pkg/tokenizer"
+	"github.com/shapestone/shape-yaml/internal/fastparser"
 	"github.com/shapestone/shape-yaml/internal/parser"
 )
 
@@ -204,9 +205,17 @@ func ParseMultiDocReader(reader io.Reader) ([]ast.SchemaNode, error) {
 
 // Validate checks if a YAML string is syntactically valid.
 //
-// This function parses the YAML and returns any syntax errors, but discards
-// the resulting AST. Use this when you only need to verify YAML syntax without
-// processing the data.
+// Validate accepts the same plain scalars as Unmarshal (for example
+// "name: John Smith"), single documents and multi-document streams
+// ("a: 1\n---\nb: 2"). It is stricter than Unmarshal in three ways:
+//
+//   - tab characters used for indentation are rejected;
+//   - duplicate mapping keys are rejected, as YAML 1.2 requires keys to be
+//     unique ("a: 1\na: 2" is an error);
+//   - content left over after a top-level block or flow collection is
+//     rejected.
+//
+// An unterminated quoted string is an error. The parsed values are discarded.
 //
 // Returns nil if the YAML is valid, or an error describing the syntax problem.
 //
@@ -219,10 +228,17 @@ func ParseMultiDocReader(reader io.Reader) ([]ast.SchemaNode, error) {
 //	if err := yaml.Validate(yamlStr); err != nil {
 //	    fmt.Printf("Invalid YAML: %v\n", err)
 //	}
-//
-// For validation with detailed error messages including line and column numbers,
-// use Parse() and check the error.
 func Validate(input string) error {
-	_, err := Parse(input)
-	return err
+	return fastparser.Validate([]byte(input))
+}
+
+// ValidateReader checks if the YAML read from reader is syntactically valid.
+// It applies the same rules as Validate. The whole input is read into memory
+// first; wrap the reader in io.LimitReader to cap its size.
+func ValidateReader(reader io.Reader) error {
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		return err
+	}
+	return fastparser.Validate(data)
 }
