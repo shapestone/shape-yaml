@@ -110,11 +110,7 @@ func (p *Parser) unmarshalValueAtIndent(rv reflect.Value, baseIndent int) error 
 		return p.unmarshalScalar(rv)
 	case '|', '>':
 		if p.isBlockScalarIndicator() {
-			val, err := p.parseBlockScalar(c == '>')
-			if err != nil {
-				return err
-			}
-			return p.setScalarValue(rv, val)
+			return p.setScalarValue(rv, p.parseBlockScalar(c == '>'))
 		}
 		return p.unmarshalScalar(rv)
 	case '~':

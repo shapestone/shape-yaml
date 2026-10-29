@@ -214,7 +214,7 @@ func (p *Parser) parseValue(indent int) (interface{}, error) {
 	// Block scalars (| or >)
 	if c == '|' || c == '>' {
 		if p.isBlockScalarIndicator() {
-			return p.parseBlockScalar(c == '>')
+			return p.parseBlockScalar(c == '>'), nil
 		}
 	}
 
@@ -971,7 +971,7 @@ func (p *Parser) isBlockScalarIndicator() bool {
 }
 
 // parseBlockScalar parses a YAML block scalar (literal | or folded >).
-func (p *Parser) parseBlockScalar(folded bool) (interface{}, error) {
+func (p *Parser) parseBlockScalar(folded bool) interface{} {
 	p.advance() // skip | or >
 
 	// Parse chomping indicator
@@ -1015,7 +1015,7 @@ func (p *Parser) parseBlockScalar(folded bool) (interface{}, error) {
 
 	if contentIndent <= 0 {
 		// No content lines — empty block scalar
-		return "", nil
+		return ""
 	}
 
 	// Collect content lines
@@ -1108,7 +1108,7 @@ func (p *Parser) parseBlockScalar(folded bool) (interface{}, error) {
 		content += "\n"
 	}
 
-	return content, nil
+	return content
 }
 
 // The join helpers use strings.Join: repeated string concatenation is
